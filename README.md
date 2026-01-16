@@ -1,6 +1,6 @@
-Trading Bot (Lab - 1)
+# Trading Bot (Lab - 1)
 
-Project Structure
+## Project Structure
 
 - src/: Source code (application logic).
 - tests/: Unit and negative tests.
@@ -9,54 +9,54 @@ Project Structure
 - docs/: Documentation.
 - Makefile: Entry point for build, test, and run commands.
 
-Prerequisites
+## Prerequisites
 
 - Python 3.10+
 - GNU Make
 - Git
  
-Installation & Setup
+## Installation & Setup
 
 1. Clone the repository:
-   git clone <repository_url>
-   cd trading-bot
+   - git clone <repository_url>
+   - cd trading-bot
 
 2. Create and activate a virtual environment:
-   python3 -m venv .venv
-   source .venv/bin/activate
+   - python3 -m venv .venv
+   - source .venv/bin/activate
 
 3. Install dependencies:
-   make install
+   - make install
 
 4. Install pre-commit hooks (required for development):
-   pre-commit install
+   - pre-commit install
 
-Configuration (Secrets Management)
+## Configuration (Secrets Management)
 
 1. Create a local environment file based on the template:
-   cp .env.example .env
+   - cp .env.example .env
 
 2. Open .env and populate the variables:
-   ENV_TYPE=local
-   API_KEY=<your_private_key>
+   - ENV_TYPE=local
+   - API_KEY=<your_private_key>
 
 Note: The .env file must never be committed to the repository.
  
-Usage
+## Usage
 
-Running the Application
+### Running the Application
 To run the bot in the configured environment:
-make run
+- make run
  
-Testing
+### Testing
 To run the test suite (pytest):
-make test
+- make test
 
 This includes:
 - Unit tests for invariant checking.
 - Negative tests for error handling.
 
-Development Standards
+### Development Standards
 
 Code Quality
 
@@ -68,12 +68,12 @@ To run formatters and linters manually:
 make format
 make lint
 
-Pre-commit Hooks
+### Pre-commit Hooks
 
 Pre-commit hooks are configured to automatically check code style and formatting before every commit. 
 If a hook fails, the commit is blocked until the issues are resolved.
 
-Final Verification
+### Final Verification
 
 Before submitting or pushing changes, run the full check suite:
 make check
