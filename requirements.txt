@@ -1,0 +1,5 @@
+python-dotenv
+pytest
+black
+flake8
+pre-commit
