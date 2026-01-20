@@ -1,0 +1,52 @@
+import os
+from eth_account import Account
+from eth_account.datastructures import SignedMessage, SignedTransaction
+from eth_account.messages import encode_defunct, encode_typed_data
+from eth_account.signers.local import LocalAccount
+
+Account.enable_unaudited_hdwallet_features()
+
+
+class WalletManager:
+    """Manages wallet operations: key loading, signing, verification."""
+
+    def __init__(self, private_key: str):
+        self._account: LocalAccount = Account.from_key(private_key)
+
+    @classmethod
+    def from_env(cls, env_var: str = "PRIVATE_KEY") -> "WalletManager":
+        key = os.getenv(env_var)
+        if not key:
+            raise ValueError(f"Environment variable {env_var} not set")
+        return cls(key)
+
+    @classmethod
+    def generate(cls) -> "WalletManager":
+        account = Account.create()
+        print(f"SAVE THIS PRIVATE KEY: {account.key.hex()} !!!")
+        return cls(account.key.hex())
+
+    @property
+    def address(self) -> str:
+        return self._account.address
+
+    def sign_message(self, message: str) -> SignedMessage:
+        signable_msg = encode_defunct(text=message)
+        return self._account.sign_message(signable_msg)
+
+    def sign_typed_data(
+        self, domain: dict, types: dict, value: dict
+    ) -> SignedMessage:  # noqa: E501
+        signable_msg = encode_typed_data(
+            domain_data=domain, message_types=types, message_data=value
+        )
+        return self._account.sign_message(signable_msg)
+
+    def sign_transaction(self, tx: dict) -> SignedTransaction:
+        return self._account.sign_transaction(tx)
+
+    def __repr__(self) -> str:
+        return f"WalletManager({self.address}"
+
+    def __str__(self) -> str:
+        return self.__repr__()
