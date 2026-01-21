@@ -92,10 +92,27 @@ class TransactionRequest:
     max_fee_per_gas: Optional[int] = None
     max_priority_fee: Optional[int] = None
     chain_id: int = 1
+    type: int = 2  # EIP-1559
 
     def to_dict(self) -> dict:
         """Convert to web3-compatible dict."""
-        ...
+        tx = {
+            "to": self.to.value,
+            "value": self.value.raw,
+            "data": self.data,
+            "chainId": self.chain_id,
+            "type": self.type,
+        }
+
+        if self.nonce is not None:
+            tx["nonce"] = self.nonce
+        if self.gas_limit is not None:
+            tx["gas"] = self.gas_limit
+        if self.max_fee_per_gas is not None:
+            tx["maxFeePerGas"] = self.max_fee_per_gas
+        if self.max_priority_fee is not None:
+            tx["maxPriorityFee"] = self.max_priority_fee
+        return tx
 
 
 @dataclass
