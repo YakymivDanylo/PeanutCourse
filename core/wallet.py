@@ -12,6 +12,11 @@ class WalletManager:
 
     def __init__(self, private_key: str):
         self._account: LocalAccount = Account.from_key(private_key)
+        """
+        Local account has an
+        access to private key and can
+        execute sign_message sign_transaction without network
+        """
 
     @classmethod
     def from_env(cls, env_var: str = "PRIVATE_KEY") -> "WalletManager":
