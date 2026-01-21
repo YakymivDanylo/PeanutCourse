@@ -129,9 +129,17 @@ class TransactionReceipt:
     @property
     def tx_fee(self) -> TokenAmount:
         """Returns transaction fee as TokenAmount."""
-        ...
+        fee_raw = self.gas_used * self.effective_gas_price
+        return TokenAmount(fee_raw, 18, "ETH")
 
     @classmethod
     def from_web3(cls, receipt: dict) -> "TransactionReceipt":
         """Parse from web3 receipt dict."""
-        ...
+        return cls(
+            tx_hash=receipt["transactionHash"].hex(),
+            block_number=receipt["blockNumber"],
+            status=bool(receipt["status"]),
+            gas_used=receipt["gasUsed"],
+            effective_gas_price=receipt["effectiveGasPrice"],
+            logs=receipt["logs"],
+        )
