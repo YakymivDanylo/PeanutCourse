@@ -19,6 +19,10 @@ class CanonicalSerializer:
         """For bytes serializing"""
         if isinstance(obj, bytes):
             return obj.hex()
+        if isinstance(obj, float):
+            raise ValueError(
+                "Floating point aren`t allowed in canonical serialization."
+            )
         raise TypeError(
             f"Object of type " f"{type(obj).__name__} is not JSON serializable"
         )

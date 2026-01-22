@@ -68,6 +68,9 @@ class WalletManager:
     def sign_typed_data(
         self, domain: dict, types: dict, value: dict
     ) -> SignedMessage:  # noqa: E501
+        if not domain or not types or not value:
+            raise ValueError("Domain and types cannot be empty")
+
         signable_msg = encode_typed_data(
             domain_data=domain, message_types=types, message_data=value
         )
