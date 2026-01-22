@@ -1,8 +1,7 @@
+import argparse
 import sys
-from datetime import datetime
-
+from datetime import datetime, timezone
 from web3 import Web3
-
 from core.types import TokenAmount
 
 KNOWN_SELECTORS = {
@@ -29,7 +28,7 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
 
     #    Base Info
     status = "SUCCESS" if reciept["status"] == 1 else "FAILED"
-    block_time = datetime.datetime.fromtimestamp(block["timestamp"]).strftime(
+    block_time = datetime.fromtimestamp(block["timestamp"], tz=timezone.utc).strftime(
         "%Y-%m-%d %H:%M:%S UTC"
     )
 
@@ -61,3 +60,23 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
 
     #   Function Decode
     print("Function Called")
+    print("---------------")
+    input_data = tx["input"].hex()
+    if len(input_data) < 3 or input_data == "0x":
+        print("Function:Native ETH Transfer")
+    else:
+        selector = input_data[:10]
+        func_name = KNOWN_SELECTORS.get(selector, "Unknown Function")
+        print(f"Selector: {selector}")
+        print(f"Function: {func_name}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Analyze an Ethereum transaction")
+    parser.add_argument("tx_hash", help="Transaction Hash")
+    parser.add_argument(
+        "--rpc", default="https://eth.llamarpc.com", help="RPC Endpoint URL"
+    )
+
+    args = parser.parse_args()
+    analyze_transaction(args.tx_hash, args.rpc)

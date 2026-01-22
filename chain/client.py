@@ -1,6 +1,6 @@
 import random
 from dataclasses import dataclass
-from datetime import time
+import time
 from typing import Optional
 
 from web3.exceptions import Web3Exception
@@ -49,7 +49,7 @@ class ChainClient:
         self.rpc_urls = rpc_urls
         self.timeout = timeout
         self.max_retries = max_retries
-        self._w3 = Optional[Web3] = None
+        self._w3: Optional[Web3] = None
         self._current_rpc_index = 0
         self._connect()
 
@@ -104,7 +104,7 @@ class ChainClient:
         base_fee = block["baseFeePerGas"]
 
         try:
-            priority = self._retry(self._w3.eth.get_priority_fee)
+            priority = self._retry(lambda: self._w3.eth.max_priority_fee)
         except (Web3Exception, ValueError):
             priority = self._w3.to_wei(1, "gwei")
 
@@ -131,7 +131,10 @@ class ChainClient:
         """Wait for transaction confirmation."""
         try:
             receipt = self._retry(
-                self._w3.eth.get_transaction_receipt(tx_hash, timeout, poll_interval)
+                self._w3.eth.wait_for_transaction_receipt,
+                tx_hash,
+                timeout,
+                poll_interval,
             )
 
             if receipt["status"] == 0:

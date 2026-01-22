@@ -75,6 +75,7 @@ class TransactionBuilder:
         return TransactionRequest(
             to=self._to,
             value=self._value,
+            data=self._data,
             nonce=self._nonce,
             gas_limit=self._gas_limit,
             max_fee_per_gas=self._max_fee_per_gas,
@@ -105,7 +106,12 @@ class TransactionBuilder:
     def send(self) -> str:
         """Build, sign, send, return tx hash."""
         signed_tx = self.build_and_sign()
-        return self.client.send_transaction(signed_tx.rawTransaction)
+        raw_tx = (
+            signed_tx.rawTransaction
+            if hasattr(signed_tx, "rawTransaction")
+            else signed_tx[0]
+        )
+        return self.client.send_transaction(raw_tx)
 
     def send_and_wait(self, timeout: int = 120) -> TransactionReceipt:
         """Build, sign, send, wait for confirmation."""

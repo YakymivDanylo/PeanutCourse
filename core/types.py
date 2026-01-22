@@ -111,7 +111,7 @@ class TransactionRequest:
         if self.max_fee_per_gas is not None:
             tx["maxFeePerGas"] = self.max_fee_per_gas
         if self.max_priority_fee is not None:
-            tx["maxPriorityFee"] = self.max_priority_fee
+            tx["maxPriorityFeePerGas"] = self.max_priority_fee
         return tx
 
 
