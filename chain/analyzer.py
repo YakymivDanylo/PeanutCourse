@@ -4,20 +4,34 @@ from datetime import datetime, timezone
 from web3 import Web3
 from core.types import TokenAmount
 
+try:
+    from eth_abi import decode
+
+    CAN_DECODE = True
+except ImportError:
+    CAN_DECODE = False
+    print("Warning: 'eth-abi' not installed. Argument decoding will be limited.")
+
 KNOWN_SELECTORS = {
-    #   ERC-20
-    "0xa9059cbb": "transfer(address,uint256)",
-    "0x095ea7b3": "approve(address,uint256)",
-    "0x23b872dd": "transferFrom(address,address,uint256)",
-    #   Uniswap V2
-    "0x38ed1739": "swapExactTokensForTokens",
-    "0x7ff36ab5": "swapExactETHForTokens",
-    "0x18cbafe5": "swapExactTokensForETH",
-    "0xf305d719": "addLiquidityETH",
-    #   Uniswap V3
-    "0x5ae401dc": "multicall",
-    "0x414bf389": "exactInputSingle",
-    "0xb858183f": "exactInput",
+    # ERC-20
+    "0xa9059cbb": {"name": "transfer", "types": ["address", "uint256"]},
+    "0x095ea7b3": {"name": "approve", "types": ["address", "uint256"]},
+    "0x23b872dd": {"name": "transferFrom", "types": ["address", "address", "uint256"]},
+    # Uniswap V2
+    "0x38ed1739": {
+        "name": "swapExactTokensForTokens",
+        "types": ["uint256", "uint256", "address[]", "address", "uint256"],
+    },
+    "0x7ff36ab5": {
+        "name": "swapExactETHForTokens",
+        "types": ["uint256", "address[]", "address", "uint256"],
+    },
+    "0x18cbafe5": {
+        "name": "swapExactTokensForETH",
+        "types": ["uint256", "uint256", "address[]", "address", "uint256"],
+    },
+    # Uniswap V3
+    "0x5ae401dc": {"name": "multicall", "types": ["bytes[]"]},
 }
 
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -82,9 +96,28 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
         print("Function: Native ETH Transfer")
     else:
         selector = input_data[:10]
-        func_name = KNOWN_SELECTORS.get(selector, "Unknown Function")
-        print(f"Selector:       {selector}")
-        print(f"Function:       {func_name}")
+        func_info = KNOWN_SELECTORS.get(selector)
+
+        if func_info:
+            print(f"Selector:       {selector}")
+            print(f"Function:       {func_info['name']}")
+
+            # Спроба декодування аргументів
+            if CAN_DECODE and len(input_data) > 10:
+                try:
+                    # Конвертуємо hex дані (без селектора) в байти
+                    data_bytes = bytes.fromhex(input_data[10:])
+                    decoded = decode(func_info["types"], data_bytes)
+                    print("Arguments:")
+                    for i, (arg_type, arg_val) in enumerate(
+                        zip(func_info["types"], decoded)
+                    ):
+                        print(f"  - arg[{i}] ({arg_type}): {arg_val}")
+                except Exception as e:
+                    print(f"  (Decoding failed: {e})")
+        else:
+            print(f"Selector:       {selector}")
+            print("Function:       Unknown Function")
     print("")
 
     print("Token Transfers")
@@ -92,15 +125,30 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
 
     transfers = []
 
+    assets_sent = {}
+    assets_received = {}
+    sender = tx["from"].lower()
+
     for log in reciept["logs"]:
         if len(log["topics"]) == 3 and log["topics"][0] == TRANSFER_TOPIC:
             try:
+                topic1 = log["topics"][1]
+                topic2 = log["topics"][2]
+
+                if hasattr(topic1, "hex"):
+                    topic1 = topic1.hex()
+                if hasattr(topic2, "hex"):
+                    topic2 = topic2.hex()
+
                 from_addr = Web3.to_checksum_address(
                     "0x" + log["topics"][1].hex()[-40:]
                 )
                 to_addr = Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
                 token_addr = log["address"]
 
+                data_hex = log["data"]
+                if hasattr(data_hex, "hex"):
+                    data_hex = data_hex.hex()
                 raw_amount = int(log["data"], 16)
 
                 amount_fmt = raw_amount / 10**18
@@ -118,10 +166,36 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
                     f"Token ({token_addr[:10]}...): {from_addr[:10]} ... -> "
                     f"{to_addr[:10]} | {amount_fmt:.4f}"
                 )
+
+                if from_addr.lower() == sender:
+                    assets_sent[token_addr] = (
+                        assets_sent.get(token_addr, 0) + raw_amount
+                    )
+
+                if to_addr.lower() == sender:
+                    assets_received[token_addr] = (
+                        assets_received.get(token_addr, 0) + raw_amount
+                    )
+
             except Exception:
                 continue
     if not transfers:
         print("No ERC-20 transfers found")
+
+    print("")
+
+    if assets_sent or assets_received:
+        print("Swap Summary")
+        print("------------")
+
+        for token, amount in assets_sent.items():
+            print(f"Sold:     {amount} (raw units) of {token}")
+
+        for token, amount in assets_received.items():
+            print(f"Received: {amount} (raw units) of {token}")
+
+        if tx["value"] > 0:
+            print(f"Sold:     {tx['value']} (wei) of ETH (Native)")
 
     print("")
 

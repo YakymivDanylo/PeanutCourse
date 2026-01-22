@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock, patch
-
 import pytest
-
 from chain.builder import TransactionBuilder
 from chain.client import ChainClient
 from core.types import Address, TokenAmount

@@ -56,10 +56,34 @@ def run_integration_test():
     # 4. Sign and Send
     print("\nSigning and Sending...")
     try:
-        tx_hash = builder.send()
+        signed_tx = builder.build_and_sign()
+
+        try:
+            raw_tx = signed_tx.rawTransaction
+        except AttributeError:
+            raw_tx = signed_tx[0]
+
+        from eth_account import Account
+
+        recovered_address = Account.recover_transaction(raw_tx)
+
+        print(f"  Signer: {wallet.address}")
+        print(f"  Recovered: {recovered_address}")
+
+        if recovered_address.lower() == wallet.address.lower():
+            print("  Signature valid: ✓")
+        else:
+            print("  ERROR: Signature verification failed!")
+            return
+
+        print("\nSending...")
+        tx_hash = client.send_transaction(raw_tx)
         print(f"  TX Hash: {tx_hash}")
     except Exception as e:
         print(f"Error sending transaction: {e}")
+        import traceback
+
+        traceback.print_exc()
         return
 
     # 5. Wait for Receipt
