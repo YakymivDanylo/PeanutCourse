@@ -15,6 +15,22 @@ class CanonicalSerializer:
     """
 
     @staticmethod
+    def _validate_no_floats(obj: Any):
+        """Recursively check for float types."""
+        if isinstance(obj, float):
+            raise ValueError(
+                "Floating point aren`t allowed in canonical serialization."
+            )
+
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                CanonicalSerializer._validate_no_floats(k)
+                CanonicalSerializer._validate_no_floats(v)
+        elif isinstance(obj, (list, tuple)):
+            for v in obj:
+                CanonicalSerializer._validate_no_floats(v)
+
+    @staticmethod
     def _default_encoder(obj):
         """For bytes serializing"""
         if isinstance(obj, bytes):
@@ -30,6 +46,7 @@ class CanonicalSerializer:
     @staticmethod
     def serialize(obj: Any) -> bytes:
         """Returns canonical bytes representation."""
+        CanonicalSerializer._validate_no_floats(obj)
         return json.dumps(
             obj,
             sort_keys=True,
