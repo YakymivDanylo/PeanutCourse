@@ -5,10 +5,22 @@ from web3 import Web3
 from core.types import TokenAmount
 
 KNOWN_SELECTORS = {
+    #   ERC-20
     "0xa9059cbb": "transfer(address,uint256)",
     "0x095ea7b3": "approve(address,uint256)",
     "0x23b872dd": "transferFrom(address,address,uint256)",
+    #   Uniswap V2
+    "0x38ed1739": "swapExactTokensForTokens",
+    "0x7ff36ab5": "swapExactETHForTokens",
+    "0x18cbafe5": "swapExactTokensForETH",
+    "0xf305d719": "addLiquidityETH",
+    #   Uniswap V3
+    "0x5ae401dc": "multicall",
+    "0x414bf389": "exactInputSingle",
+    "0xb858183f": "exactInput",
 }
+
+TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 
 def analyze_transaction(tx_hash: str, rpc_url: str):
@@ -62,13 +74,56 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
     print("Function Called")
     print("---------------")
     input_data = tx["input"].hex()
-    if len(input_data) < 3 or input_data == "0x":
-        print("Function:Native ETH Transfer")
+
+    if not input_data.startswith("0x"):
+        input_data = "0x" + input_data
+
+    if len(input_data) < 10:
+        print("Function: Native ETH Transfer")
     else:
         selector = input_data[:10]
         func_name = KNOWN_SELECTORS.get(selector, "Unknown Function")
-        print(f"Selector: {selector}")
-        print(f"Function: {func_name}")
+        print(f"Selector:       {selector}")
+        print(f"Function:       {func_name}")
+    print("")
+
+    print("Token Transfers")
+    print("---------------")
+
+    transfers = []
+
+    for log in reciept["logs"]:
+        if len(log["topics"]) == 3 and log["topics"][0] == TRANSFER_TOPIC:
+            try:
+                from_addr = Web3.to_checksum_address(
+                    "0x" + log["topics"][1].hex()[-40:]
+                )
+                to_addr = Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
+                token_addr = log["address"]
+
+                raw_amount = int(log["data"], 16)
+
+                amount_fmt = raw_amount / 10**18
+
+                transfers.append(
+                    {
+                        "token": token_addr,
+                        "from": from_addr,
+                        "to": to_addr,
+                        "amount": amount_fmt,
+                        "raw": raw_amount,
+                    }
+                )
+                print(
+                    f"Token ({token_addr[:10]}...): {from_addr[:10]} ... -> "
+                    f"{to_addr[:10]} | {amount_fmt:.4f}"
+                )
+            except Exception:
+                continue
+    if not transfers:
+        print("No ERC-20 transfers found")
+
+    print("")
 
 
 if __name__ == "__main__":
