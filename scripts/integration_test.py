@@ -1,12 +1,12 @@
 import os
 import sys
-from dotenv import load_dotenv
-from chain.client import ChainClient
-from chain.builder import TransactionBuilder
-from core.wallet import WalletManager
-from core.types import Address, TokenAmount
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from dotenv import load_dotenv  # noqa: E402
+from chain.client import ChainClient  # noqa: E402
+from chain.builder import TransactionBuilder  # noqa: E402
+from core.wallet import WalletManager  # noqa: E402
+from core.types import Address, TokenAmount  # noqa: E402
 
 
 def run_integration_test():
@@ -71,7 +71,7 @@ def run_integration_test():
         print(f"  Recovered: {recovered_address}")
 
         if recovered_address.lower() == wallet.address.lower():
-            print("  Signature valid: ✓")
+            print("  Signature valid: Yes")
         else:
             print("  ERROR: Signature verification failed!")
             return

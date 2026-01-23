@@ -14,6 +14,6 @@ test:
 	pytest tests
 
 run:
-	$(PYTHON) src/main.py
+	$(PYTHON) scripts/integration_test.py
 
 check: format lint test
