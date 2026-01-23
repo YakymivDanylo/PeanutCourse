@@ -30,6 +30,10 @@ KNOWN_SELECTORS = {
         "name": "swapExactTokensForETH",
         "types": ["uint256", "uint256", "address[]", "address", "uint256"],
     },
+    "0xb6f9de95": {
+        "name": "swapExactETHForTokensSupportingFeeOnTransferTokens",
+        "types": ["uint256", "address[]", "address", "uint256"],
+    },
     # Uniswap V3
     "0x5ae401dc": {"name": "multicall", "types": ["bytes[]"]},
 }
@@ -102,10 +106,8 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
             print(f"Selector:       {selector}")
             print(f"Function:       {func_info['name']}")
 
-            # Спроба декодування аргументів
             if CAN_DECODE and len(input_data) > 10:
                 try:
-                    # Конвертуємо hex дані (без селектора) в байти
                     data_bytes = bytes.fromhex(input_data[10:])
                     decoded = decode(func_info["types"], data_bytes)
                     print("Arguments:")
@@ -130,7 +132,7 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
     sender = tx["from"].lower()
 
     for log in reciept["logs"]:
-        if len(log["topics"]) == 3 and log["topics"][0] == TRANSFER_TOPIC:
+        if len(log["topics"]) == 3 and log["topics"][0].hex() == TRANSFER_TOPIC:
             try:
                 topic1 = log["topics"][1]
                 topic2 = log["topics"][2]
@@ -149,7 +151,7 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
                 data_hex = log["data"]
                 if hasattr(data_hex, "hex"):
                     data_hex = data_hex.hex()
-                raw_amount = int(log["data"], 16)
+                raw_amount = int(data_hex, 16)
 
                 amount_fmt = raw_amount / 10**18
 
