@@ -118,3 +118,31 @@ def test_serializater_types():
 
     with pytest.raises(ValueError):
         CanonicalSerializer.serialize(1.5)
+
+
+def test_wallet_keyfile_flow(tmp_path):
+    """Test full encryption/decryption flow with temporary file"""
+    original_wallet = WalletManager.generate()
+    password = "super_secure_password"
+
+    keyfile_path = tmp_path / "test_keyfile.json"
+
+    original_wallet.to_keyfile(str(keyfile_path), password)
+    assert keyfile_path.exists()
+
+    loaded_wallet = WalletManager.from_keyfile(str(keyfile_path), password)
+
+    assert loaded_wallet.address == original_wallet.address
+
+    assert loaded_wallet._account.key == original_wallet._account.key
+
+
+def test_wallet_keyfile_wrong_password(tmp_path):
+    """Test that loading with wrong password fails"""
+    wallet = WalletManager.generate()
+    password = "coorect_password"
+    keyfile_path = tmp_path / "test_keystore_locked.json"
+    wallet.to_keyfile(str(keyfile_path), password)
+
+    with pytest.raises(ValueError, match="Invalid password"):
+        WalletManager.from_keyfile(str(keyfile_path), "wrong_password")
