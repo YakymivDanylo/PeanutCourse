@@ -125,6 +125,6 @@ This command executes formatting, linting, and testing in sequence.
 
 ### Key Features & Design Decisions
 - Safety First: The **`WalletManager`** ensures private keys are never exposed in **`__repr__`** or logs.
-- Reliability: The **'ChainClient'** implements retry logic with exponential backoff to handle RPC instability (errors like "Too Many Requests" or "Timeout").
-- Precision: **'TokenAmount'** handles decimals precisely, preventing floating-point errors common in financial software.
-- Usability: The **'TransactionBuilder'** uses a Fluent Interface pattern, making transaction construction readable and less error-prone.
+- Reliability: The **`ChainClient`** implements retry logic with exponential backoff to handle RPC instability (errors like "Too Many Requests" or "Timeout").
+- Precision: **`TokenAmount`** handles decimals precisely, preventing floating-point errors common in financial software.
+- Usability: The **`TransactionBuilder`** uses a Fluent Interface pattern, making transaction construction readable and less error-prone.
