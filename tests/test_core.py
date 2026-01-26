@@ -99,7 +99,7 @@ def test_serializer_determinism():
     data = {"a": 1, "b": 2, "c": [3, 4, 5]}
     first = CanonicalSerializer.serialize(data)
 
-    for _ in range(50):
+    for _ in range(1000):
         assert CanonicalSerializer.serialize(data) == first
 
 
