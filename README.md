@@ -49,7 +49,7 @@ This project serves as the foundation for an arbitrage trading system. It includ
 
 2. Open .env and populate the variables:
    - ENV_TYPE=local
-   - API_KEY=<your_private_key>
+   - PRIVATE_KEY=<your_private_key>
 
 Note: The .env file must never be committed to the repository.
  
