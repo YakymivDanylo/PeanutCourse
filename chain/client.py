@@ -159,5 +159,5 @@ class ChainClient:
     def call(self, tx: TransactionRequest, block: str = "latest") -> bytes:
         """eth_call - simulate transaction without sending."""
         tx_dict = tx.to_dict()
-        clean_tx_dict = {k: v for k, v in tx_dict if v is not None}
+        clean_tx_dict = {k: v for k, v in tx_dict.items() if v is not None}
         return self._retry(self._w3.eth.call, clean_tx_dict, block)
