@@ -91,3 +91,46 @@ def test_client_retry_logic():
         assert mock_get_balance.call_count == 3
 
         assert client._connect.call_count == 2
+
+
+def test_analyze_transaction_success(capsys):
+    """Test analyzer prints correct info for a successful transaction"""
+    with patch("chain.analyzer.Web3") as MockWeb3:
+        #       Configure the mock Web3 instance
+        mock_w3 = MockWeb3.return_value
+        mock_w3.is_connected.return_value = True
+
+        #       Mock transaction data
+        mock_w3.eth.get_transaction.return_value = {
+            "hash": "0x123",
+            "from": "0xSender",
+            "to": "0xReceiver",
+            "value": 1000000000000000000,
+            "gas": 21000,
+            "input": b"",
+        }
+
+        #       Mock receipt data
+        mock_w3.eth.get_transaction_receipt.return_value = {
+            "status": 1,
+            "blockNumber": 12345,
+            "gasUsed": 21000,
+            "effectiveGasPrice": 20000000000,
+            "logs": [],
+        }
+
+        #       Mock block data
+        mock_w3.eth.get_block.return_value = {
+            "timestamp": 1678886400,
+        }
+
+        from chain.analyzer import analyze_transaction
+
+        analyze_transaction("0x123", "http://mock.rpc")
+
+        captured = capsys.readouterr()
+
+        assert "Transaction Analysis" in captured.out
+        assert "Status:         SUCCESS" in captured.out
+        assert "Value:           1 ETH" in captured.out
+        assert "Function: Native ETH Transfer" in captured.out

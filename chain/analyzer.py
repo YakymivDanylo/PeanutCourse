@@ -72,13 +72,14 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
     print(f"From:           {tx['from']}")
     print(f"To:             {tx['to']}")
     val = TokenAmount(tx["value"], 18, "ETH")
-    print(f"Value:           {val.human}")
+    print(f"Value:           {val}")
     print("")
 
     #   Gas Analysis
     print("Gas Analysis")
     print("------------")
     print(f"Gas Limit:          {tx['gas']}")
+
     print(f"Gas Used:{reciept['gasUsed']} ({reciept['gasUsed']/tx['gas']*100:.2f}%)")
 
     effective_price = reciept["effectiveGasPrice"]
@@ -142,16 +143,18 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
                 if hasattr(topic2, "hex"):
                     topic2 = topic2.hex()
 
-                from_addr = Web3.to_checksum_address(
-                    "0x" + log["topics"][1].hex()[-40:]
-                )
-                to_addr = Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
+                from_addr = Web3.to_checksum_address("0x" + topic1[-40:])
+                to_addr = Web3.to_checksum_address("0x" + topic2[-40:])
                 token_addr = log["address"]
 
                 data_hex = log["data"]
                 if hasattr(data_hex, "hex"):
                     data_hex = data_hex.hex()
-                raw_amount = int(data_hex, 16)
+
+                if data_hex == "0x" or not data_hex:
+                    raw_amount = 0
+                else:
+                    raw_amount = int(data_hex, 16)
 
                 amount_fmt = raw_amount / 10**18
 
@@ -179,7 +182,8 @@ def analyze_transaction(tx_hash: str, rpc_url: str):
                         assets_received.get(token_addr, 0) + raw_amount
                     )
 
-            except Exception:
+            except Exception as e:
+                print(f"(Decoding failed: {e})")
                 continue
     if not transfers:
         print("No ERC-20 transfers found")
