@@ -119,34 +119,15 @@ class RouteFinder:
         Find route that maximizes NET output (after gas).
         Returns (best_route, net_output).
         """
-        all_routes = self.find_all_routes(token_in, token_out, max_hops)
-        best_route = None
-        best_amount = -1
+        comparison = self.compare_routes(
+            token_in, token_out, amount_in, gas_price_gwei, max_hops
+        )
 
-        eth_price_in_out = self._get_token_eth_price(token_out)
+        if not comparison:
+            return None, 0
 
-        for route in all_routes:
-            try:
-                gross_output = route.get_output(amount_in)
-
-                gas_used = route.estimate_gas()
-                gas_cost_eth = Decimal(gas_used * gas_price_gwei) / Decimal(10**9)
-
-                # Convert Gas cost in output token
-                if eth_price_in_out:
-                    gas_cost_token = int(
-                        gas_cost_eth * eth_price_in_out * Decimal(10**18)
-                    )
-                else:
-                    gas_cost_token = 0
-
-                net_output = gross_output - gas_cost_token
-                if net_output > best_amount:
-                    best_amount = net_output
-                    best_route = route
-            except ValueError:
-                continue
-        return best_route, best_amount
+        best = comparison[0]
+        return best["route"], best["net_output"]
 
     def compare_routes(
         self,
@@ -208,7 +189,7 @@ class RouteFinder:
             return Decimal(1)
 
         for pool, neighbor in self.graph[token]:
-            if neighbor == token:
+            if neighbor == WETH_ADDRESS:
                 return pool.get_spot_price(WETH_ADDRESS)
 
         return None
