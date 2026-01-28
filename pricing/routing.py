@@ -1,3 +1,7 @@
+import collections
+from decimal import Decimal
+from typing import Optional, Any
+
 from core.types import Address
 from pricing.amm import UniswapV2Pair
 
@@ -64,11 +68,15 @@ class RouteFinder:
         self.pools = pools
         self.graph = self._build_graph()
 
-    def _build_graph(self) -> dict:
+    def _build_graph(self) -> dict[Address, list[tuple[UniswapV2Pair, Address]]]:
         """
         Build adjacency graph: token → [(pool, other_token), ...]
         """
-        ...
+        graph = collections.defaultdict(list)
+        for pool in self.pools:
+            graph[pool.token0].append((pool, pool.token1))
+            graph[pool.token1].append((pool, pool.token0))
+        return graph
 
     def find_all_routes(
         self, token_in: Address, token_out: Address, max_hops: int = 3
@@ -76,7 +84,28 @@ class RouteFinder:
         """
         Find all possible routes up to max_hops.
         """
-        ...
+        routes = []
+        # Stack  that stores (current token, visited tokens, pools path list)
+        stack = [(token_in, [token_in], [])]
+
+        while stack:
+            current_token, visited, pools_path = stack.pop()
+
+            if current_token == token_out:
+                if len(pools_path) > 0:
+                    routes.append(Route(pools_path, visited))
+                continue
+
+            if len(pools_path) >= max_hops:
+                continue
+
+            for pool, neighbor in self.graph[current_token]:
+                if neighbor not in visited:
+                    new_visited = visited + [neighbor]
+                    new_pools = pools_path + [pool]
+                    stack.append((neighbor, new_visited, new_pools))
+
+        return routes
 
     def find_best_route(
         self,
@@ -85,16 +114,48 @@ class RouteFinder:
         amount_in: int,
         gas_price_gwei: int,
         max_hops: int = 3,
-    ) -> tuple[Route, int]:
+    ) -> tuple[Optional[Route], int]:
         """
         Find route that maximizes NET output (after gas).
         Returns (best_route, net_output).
         """
-        ...
+        all_routes = self.find_all_routes(token_in, token_out, max_hops)
+        best_route = None
+        best_amount = -1
+
+        eth_price_in_out = self._get_token_eth_price(token_out)
+
+        for route in all_routes:
+            try:
+                gross_output = route.get_output(amount_in)
+
+                gas_used = route.estimate_gas()
+                gas_cost_eth = Decimal(gas_used * gas_price_gwei) / Decimal(10**9)
+
+                # Convert Gas cost in output token
+                if eth_price_in_out:
+                    gas_cost_token = int(
+                        gas_cost_eth * eth_price_in_out * Decimal(10**18)
+                    )
+                else:
+                    gas_cost_token = 0
+
+                net_output = gross_output - gas_cost_token
+                if net_output > best_amount:
+                    best_amount = net_output
+                    best_route = route
+            except ValueError:
+                continue
+        return best_route, best_amount
 
     def compare_routes(
-        self, token_in: Address, token_out: Address, amount_in: int, gas_price_gwei: int
-    ) -> list[dict]:
+        self,
+        token_in: Address,
+        token_out: Address,
+        amount_in: int,
+        gas_price_gwei: int,
+        max_hops: int = 3,
+    ) -> list[dict[str, Any]]:
         """
         Compare all routes with detailed breakdown:
         {
@@ -105,4 +166,49 @@ class RouteFinder:
             'net_output': int,
         }
         """
-        ...
+        all_routes = self.find_all_routes(token_in, token_out, max_hops)
+        results = []
+
+        eth_price_in_out = self._get_token_eth_price(token_out)
+
+        for route in all_routes:
+            try:
+                gross_output = route.get_output(amount_in)
+                gas_used = route.estimate_gas()
+                gas_cost_eth = Decimal(gas_used * gas_price_gwei) / Decimal(10**9)
+
+                if eth_price_in_out:
+                    gas_cost_out = int(
+                        gas_cost_eth * eth_price_in_out * Decimal(10**18)
+                    )
+                else:
+                    gas_cost_out = 0
+
+                net_output = gross_output - gas_cost_out
+                results.append(
+                    {
+                        "route": route,
+                        "gross_output": gross_output,
+                        "gas_estimate": gas_used,
+                        "gas_cost": gas_cost_out,
+                        "net_output": net_output,
+                    }
+                )
+
+            except ValueError:
+                continue
+
+        return sorted(results, key=lambda x: x["net_output"], reverse=True)
+
+    def _get_token_eth_price(self, token: Address) -> Optional[Decimal]:
+        """
+        Helper to find the price of 1 ETH in token_out
+        """
+        if token == WETH_ADDRESS:
+            return Decimal(1)
+
+        for pool, neighbor in self.graph[token]:
+            if neighbor == token:
+                return pool.get_spot_price(WETH_ADDRESS)
+
+        return None
