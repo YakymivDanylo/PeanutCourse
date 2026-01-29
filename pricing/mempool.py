@@ -32,6 +32,7 @@ class ParsedSwap:
     deadline: int
     sender: Address
     gas_price: int
+    value: int
 
     @property
     def slippage_tolerance(self) -> Decimal:
@@ -44,7 +45,6 @@ class MempoolMonitor:
     Monitors pending transactions for swap activity.
     """
 
-    # Known DEX router selectors
     SWAP_SELECTORS = {
         "0x38ed1739": (
             "UniswapV2",
@@ -261,6 +261,7 @@ class MempoolMonitor:
 
             sender = tx.get("from")
             gas_price = tx.get("gasPrice", 0)
+            value = tx.get("value", 0)
 
             tx_hash = tx.get("hash")
             if hasattr(tx_hash, "hex"):
@@ -278,6 +279,7 @@ class MempoolMonitor:
                 deadline=deadline,
                 sender=Address(sender),
                 gas_price=gas_price,
+                value=value,
             )
 
         except Exception as e:

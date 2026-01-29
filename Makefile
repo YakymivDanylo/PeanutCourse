@@ -15,5 +15,7 @@ test:
 
 run:
 	$(PYTHON) scripts/integration_test.py
+run_fork:
+	./scripts/start_fork.sh
 
 check: format lint test
