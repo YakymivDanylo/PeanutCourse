@@ -7,3 +7,5 @@ web3>=6.0.0
 eth-account>=0.8.0
 pydantic>=2.0.0
 eth-abi
+websockets>=10.0
+pytest-asyncio
