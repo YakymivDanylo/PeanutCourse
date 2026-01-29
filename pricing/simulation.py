@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
+import time
 
+from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxParams
@@ -49,9 +51,7 @@ class ForkSimulator:
     def _set_balance_ether(self, address: Address, amount_eth: float = 10.0):
         """Give an account eth for gas"""
         wei = int(amount_eth * 10**18)
-        self.w3.provider.make_request(
-            "anvil_set_balance_ether", [address.checksum, hex(wei)]
-        )
+        self.w3.provider.make_request("anvil_setBalance", [address.checksum, hex(wei)])
 
     def simulate_swap(
         self, router: Address, swap_params: dict, sender: Address
@@ -119,21 +119,55 @@ class ForkSimulator:
         """
         Simulate a multi-hop route.
         """
-        ...
+        path_addresses = [t.checksum for t in route.path]
+        deadline = int(time.time()) + 3600
+
+        # We set amountOutMin to 0 to ensure it doesn't revert
+        # due to slippage during sim
+        encoded_args = encode(
+            ["uint256", "uint256", "address[]", "address", "uint256"],
+            [amount_in, 0, path_addresses, sender.checksum, deadline],
+        )
+
+        data = self.SWAP_EXACT_TOKENS_FOR_TOKENS + encoded_args
+
+        swap_params = {
+            "data": data,
+            "value": 0,
+        }
+
+        return self.simulate_swap(
+            router=self.ROUTER_ADDRESS, swap_params=swap_params, sender=sender
+        )
 
     def compare_simulation_vs_calculation(
-        self, pair: UniswapV2Pair, amount_in: int, token_in: Address
+        self,
+        pair: UniswapV2Pair,
+        amount_in: int,
+        token_in: Address,
+        sender_override: Optional[Address] = None,
     ) -> dict:
         """
         Compare our AMM math vs actual fork simulation.
         Useful for validation.
         """
-        calculated = pair.get_amount_out(amount_in, token_in)
-        simulated = self.simulate_swap(...)
+        calculated_out = pair.get_amount_out(amount_in, token_in)
+        token_out = pair.token1 if token_in == pair.token0 else pair.token0
+        route = Route([pair], [token_in, token_out])
+
+        sender = (
+            sender_override
+            if sender_override
+            else Address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+        )
+
+        sim_result = self.simulate_route(route, amount_in, sender)
 
         return {
-            "calculated": calculated,
-            "simulated": simulated.amount_out,
-            "difference": abs(calculated - simulated.amount_out),
-            "match": calculated == simulated.amount_out,
+            "calculated": calculated_out,
+            "simulated": sim_result.amount_out,
+            "difference": abs(calculated_out - sim_result.amount_out),
+            "match": calculated_out == sim_result.amount_out,
+            "gas": sim_result.gas_used,
+            "error": sim_result.error,
         }

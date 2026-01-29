@@ -50,6 +50,7 @@ This project serves as the foundation for an arbitrage trading system. It includ
 2. Open .env and populate the variables:
    - ENV_TYPE=local
    - PRIVATE_KEY=<your_private_key>
+   - ALCHEMY_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/ВАШ_КЛЮЧ_ALCHEMY
 
 Note: The .env file must never be committed to the repository.
  
