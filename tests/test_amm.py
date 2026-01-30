@@ -111,3 +111,16 @@ def test_swap_is_immutable(eth_usdc_pair):
 
     # USDC (token1) got out -> reserve1 decreased
     assert new_pair.reserve1 < original_r1
+
+
+def test_amount_in_out_consistency(eth_usdc_pair):
+    amount_in_eth = 10**18  # 1 ETH
+
+    # Now we know how much we`ll get USDC
+    amount_out_usdc = eth_usdc_pair.get_amount_out(amount_in_eth, WETH)
+
+    # Ask how many ETH we need to get the same number of USDC
+    required_in_eth = eth_usdc_pair.get_amount_in(amount_out_usdc, USDC)
+
+    assert required_in_eth >= amount_in_eth * 0.999
+    assert (required_in_eth - amount_in_eth) <= 100_000_000

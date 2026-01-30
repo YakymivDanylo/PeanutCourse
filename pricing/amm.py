@@ -76,9 +76,9 @@ class UniswapV2Pair:
             raise ValueError("Insufficient output amount")
 
         if token_out == self.token0:
-            reserve_in, reserve_out = self.reserve0, self.reserve1
-        elif token_out == self.token1:
             reserve_in, reserve_out = self.reserve1, self.reserve0
+        elif token_out == self.token1:
+            reserve_in, reserve_out = self.reserve0, self.reserve1
         else:
             raise ValueError(f"Token {token_out.value} not in pair")
 
