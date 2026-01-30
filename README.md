@@ -158,24 +158,25 @@ Visualize how trade size affects the execution price in a specific pool:
 __Example__
   
 ```
-(.venv) danylo@DesktopDanylo:~/Projects/trading-bot$ python scripts/analyze_impact.py --token-in USDC --sizes 1000,5000,10000
+(.venv) danylo@DesktopDanylo:~/Projects/trading-bot$ python scripts/analyze_impact.py --token-in ETH --sizes "1, 10, 50, 100"
 Fetching pool data... (Using Mock for Demo)
 
-Price Impact Analysis for USDC -> ETH  
-Pool: 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc  
-Reserves: 1000000000000000000000 (raw) / 2000000000000 (raw)  
-Spot Price: 0.00 ETH/USDC  
+Price Impact Analysis for ETH -> USDC
+Pool: 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc
+Reserves: 1000 ETH / 2000000 USDC
+Spot Price: 2000.0000 USDC/ETH
 
-─────────────────────────────────────────────────────────────────  
-    USDC     |     ETH      |  Exec Price  |   Impact    
-─────────────────────────────────────────────────────────────────  
-   1,000     |    0.4983    |   0.000498   |   0.35%   
-   5,000     |    2.4863    |   0.000497   |   0.55%   
-   10,000    |    4.9603    |   0.000496   |   0.79%   
+─────────────────────────────────────────────────────────────────
+    ETH      |     USDC     |  Exec Price  |   Impact  
+─────────────────────────────────────────────────────────────────
+    1.00     |  1,992.0140  | 1,992.013962 |   0.40%   
+   10.00     | 19,743.1607  | 1,974.316069 |   1.28%   
+   50.00     | 94,965.9475  | 1,899.318950 |   5.03%   
+   100.00    | 181,322.1788 | 1,813.221788 |   9.34%   
 ─────────────────────────────────────────────────────────────────
 
 Calculating max trade for 1% impact...
-Max trade for 1% impact: 14,183.97 USDC
+Max trade for 1% impact: 7.09 ETH
  ```
 
 ### Running a Local Fork
