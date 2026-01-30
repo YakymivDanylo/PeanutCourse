@@ -87,7 +87,7 @@ class UniswapV2Pair:
         if amount_out >= reserve_out:
             raise ValueError("Insufficient liquidity for output token")
 
-        numerator = reserve_in * FEE_BPS * amount_out
+        numerator = reserve_in * amount_out * BPS_DENOMINATOR
         denominator = (reserve_out - amount_out) * (BPS_DENOMINATOR - self.fee_bps)
 
         return (numerator // denominator) + 1
