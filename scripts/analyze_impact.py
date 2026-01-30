@@ -63,16 +63,8 @@ def main():
     adj_factor = Decimal(10**decimals_in) / Decimal(10**decimals_out)
     real_spot = spot * adj_factor
 
-    res0_human = TokenAmount(
-        pair.reserve0,
-        decimals_in if args.token_in != "USDC" else decimals_out,
-        "ETH" if args.token_in != "USDC" else "USDC",
-    )
-    res1_human = TokenAmount(
-        pair.reserve1,
-        decimals_out if args.token_in != "USDC" else decimals_in,
-        "USDC" if args.token_in != "USDC" else "ETH",
-    )
+    res0_human = TokenAmount(pair.reserve0, 18, "ETH")
+    res1_human = TokenAmount(pair.reserve1, 6, "USDC")
 
     print(
         f"Reserves: {res0_human.human} {res0_human.symbol} / {res1_human.human}"
