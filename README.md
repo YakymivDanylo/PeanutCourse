@@ -13,7 +13,16 @@ This project serves as the foundation for an arbitrage trading system. It includ
     - `client.py`: RPC client with automatic retries, exponential backoff, and provider switching.
     - `builder.py`: Fluent API for constructing and signing transactions.
     - `analyzer.py`: Tool for dissecting and decoding transaction data.
-- **`scripts/`**: Utility scripts (e.g., integration tests).
+- **`pricing/`**: Market analysis and simulation.
+    - `amm.py`: Constant Product Market Maker (Uniswap V2) math and Price Impact analysis.
+    - `routing.py`: Multi-hop route discovery and net-output optimization (including gas costs).
+    - `mempool.py`: Real-time monitoring of pending swaps via WebSockets.
+    - `simulation.py`: Transaction simulation using local Ethereum forks (Anvil).
+    - `engine.py`: High-level orchestrator integrating routing, simulation, and monitoring.
+- **`scripts/`**: Utility scripts and tools.
+    - `analyze_impact.py`: CLI tool to visualize price impact for different trade sizes.
+    - `integration_test.py`: End-to-end test on Sepolia network.
+    - `start_fork.sh`: Script to launch a local Anvil fork for testing.
 - **`tests/`**: Unit tests ensuring correctness of core components.
 - **`src/`**: Source code (application logic).
 - **`configs/`**: Configuration files.
@@ -25,31 +34,33 @@ This project serves as the foundation for an arbitrage trading system. It includ
 - Python 3.10+
 - GNU Make
 - Git
+- Anvil (part of Foundry) for local fork simulations.
  
 ## Installation & Setup
 
 1. Clone the repository:
-   - git clone <repository_url>
-   - cd trading-bot
+   - `git clone <repository_url>`
+   - `cd trading-bot`
 
 2. Create and activate a virtual environment:
-   - python3 -m venv .venv
-   - source .venv/bin/activate
+   - `python3 -m venv .venv`
+   - `source .venv/bin/activate`
 
 3. Install dependencies:
-   - make install
+   - `make install`
 
 4. Install pre-commit hooks (required for development):
-   - pre-commit install
+   - `pre-commit install`
 
 ## Configuration (Secrets Management)
 
 1. Create a local environment file based on the template:
-   - cp .env.example .env
+   - `cp .env.example .env`
 
 2. Open .env and populate the variables:
    - ENV_TYPE=local
    - PRIVATE_KEY=<your_private_key>
+   - SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
    - ALCHEMY_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/ВАШ_КЛЮЧ_ALCHEMY
 
 Note: The .env file must never be committed to the repository.
@@ -90,11 +101,13 @@ Integration test PASSED
 
 Analyze any transaction on the Ethereum mainnet (or other chains via RPC config). This tool decodes input data, calculates fees, and summarizes transfers:  
 
-python -m chain.analyzer <TX_HASH> --rpc (https://ethereum-sepolia.publicnode.com - для тестнових транзакцій) (https://rpc.flashbots.net - для реальних транзакцій)
+`python -m chain.analyzer <TX_HASH> --rpc ...` (https://ethereum-sepolia.publicnode.com - для тестнових транзакцій) (https://rpc.flashbots.net - для реальних транзакцій)
+
+
 
 ### Testing
 To run the test suite (pytest):
-- make test
+- `make test`
 
 This includes:
 - Unit tests for invariant checking.
@@ -102,15 +115,16 @@ This includes:
 
 ### Development Standards
 
-Code Quality
+__Code Quality__
 
 The project uses the following tools to enforce code quality:
 - Formatter: Black
 - Linter: Flake8
 
-To run formatters and linters manually:
-make format
-make lint
+To run formatters and linters manually:  
+
+- `make format`  
+- `make lint`
 
 ### Pre-commit Hooks
 
@@ -125,7 +139,62 @@ make check
 This command executes formatting, linting, and testing in sequence.
 
 ### Key Features & Design Decisions
-- Safety First: The **`WalletManager`** ensures private keys are never exposed in **`__repr__`** or logs.
-- Reliability: The **`ChainClient`** implements retry logic with exponential backoff to handle RPC instability (errors like "Too Many Requests" or "Timeout").
-- Precision: **`TokenAmount`** handles decimals precisely, preventing floating-point errors common in financial software.
-- Usability: The **`TransactionBuilder`** uses a Fluent Interface pattern, making transaction construction readable and less error-prone.
+- __Safety First__: The **`WalletManager`** ensures private keys are never exposed in **`__repr__`** or logs.
+- __Reliability__: The **`ChainClient`** implements retry logic with exponential backoff to handle RPC instability (errors like "Too Many Requests" or "Timeout").
+- __Precision__: **`TokenAmount`** handles decimals precisely, preventing floating-point errors common in financial software.
+- __Usability__: The **`TransactionBuilder`** uses a Fluent Interface pattern, making transaction construction readable and less error-prone.
+
+## Week 2: AMM & Pricing Module
+
+This update introduces a sophisticated pricing engine that calculates optimal swap routes, predicts price impact, and validates results via local blockchain simulation.
+
+### Price Impact Analyzer CLI
+
+Visualize how trade size affects the execution price in a specific pool:
+
+`python scripts/analyze_impact.py` - will run a script with a default settings  
+`python scripts/analyze_impact.py --token-in USDC --sizes 1000,5000,10000`
+
+__Example__
+  
+```
+(.venv) danylo@DesktopDanylo:~/Projects/trading-bot$ python scripts/analyze_impact.py --token-in USDC --sizes 1000,5000,10000
+Fetching pool data... (Using Mock for Demo)
+
+Price Impact Analysis for USDC -> ETH  
+Pool: 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc  
+Reserves: 1000000000000000000000 (raw) / 2000000000000 (raw)  
+Spot Price: 0.00 ETH/USDC  
+
+─────────────────────────────────────────────────────────────────  
+    USDC     |     ETH      |  Exec Price  |   Impact    
+─────────────────────────────────────────────────────────────────  
+   1,000     |    0.4983    |   0.000498   |   0.35%   
+   5,000     |    2.4863    |   0.000497   |   0.55%   
+   10,000    |    4.9603    |   0.000496   |   0.79%   
+─────────────────────────────────────────────────────────────────
+
+Calculating max trade for 1% impact...
+Max trade for 1% impact: 14,183.97 USDC
+ ```
+
+### Running a Local Fork
+
+Start a local simulation environment forked from Sepolia or Mainnet:
+
+`make run_fork`
+
+### Key Features & Design Decisions
+
+- __Fixed-Point Precision__: Implemented integer-only math for AMM calculations to ensure exact parity with Solidity smart contracts and prevent floating-point inaccuracies.
+
+- __Optimal Routing__: Developed a pathfinding algorithm that maximizes net output by evaluating multi-hop routes and accounting for hop-specific gas overhead.
+
+- __Pre-Trade Simulation__: Integrated a local fork environment (Anvil) to validate calculated quotes against actual state transitions before execution.
+
+- __Mempool Awareness__: Established a WebSocket-based monitor to detect pending swaps, enabling the system to estimate real-time slippage and identify arbitrage opportunities.
+
+- __Modular Architecture__: Isolated pricing logic, routing, and simulations into distinct modules, coordinated by a central PricingEngine for high-level integration.
+
+- __Gas-Aware Optimization__: Logic dynamically switches between direct and multi-hop routes based on current network gas prices to ensure profitability.
+
