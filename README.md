@@ -184,6 +184,21 @@ Start a local simulation environment forked from Sepolia or Mainnet:
 
 `make run_fork`
 
+### System Architecture
+
+```mermaid
+graph TD
+    M[MempoolMonitor] -->|ParsedSwap| E[PricingEngine]
+    RF[RouteFinder] -->|Best Route| E
+    FS[ForkSimulator] -->|Validation| E
+    E -->|Quote| User[Arbitrage Logic/User]
+    
+    subgraph "Core Components"
+    RF --- AMM[AMM Math]
+    AMM --- CC[ChainClient]
+    end
+```
+
 ### Key Features & Design Decisions
 
 - __Fixed-Point Precision__: Implemented integer-only math for AMM calculations to ensure exact parity with Solidity smart contracts and prevent floating-point inaccuracies.
