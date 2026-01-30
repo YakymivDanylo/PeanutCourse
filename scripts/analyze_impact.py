@@ -78,7 +78,7 @@ def main():
         f"Reserves: {res0_human.human} {res0_human.symbol} / {res1_human.human}"
         f" {res1_human.symbol}"
     )
-    print(f"Spot Price: {real_spot:.2f} {token_out_symbol}/{args.token_in}")
+    print(f"Spot Price: {real_spot:.4f} {token_out_symbol}/{args.token_in}")
 
     results = analyzer.generate_impact_table(token_in_addr, sizes_raw)
 
