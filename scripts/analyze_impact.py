@@ -5,7 +5,7 @@ from decimal import Decimal
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.types import Address  # noqa: E402
+from core.types import Address, TokenAmount  # noqa: E402
 from pricing.amm import UniswapV2Pair, PriceImpactAnalyzer  # noqa: E402
 
 
@@ -63,7 +63,21 @@ def main():
     adj_factor = Decimal(10**decimals_in) / Decimal(10**decimals_out)
     real_spot = spot * adj_factor
 
-    print(f"Reserves: {pair.reserve0} (raw) / {pair.reserve1} (raw)")
+    res0_human = TokenAmount(
+        pair.reserve0,
+        decimals_in if args.token_in != "USDC" else decimals_out,
+        "ETH" if args.token_in != "USDC" else "USDC",
+    )
+    res1_human = TokenAmount(
+        pair.reserve1,
+        decimals_out if args.token_in != "USDC" else decimals_in,
+        "USDC" if args.token_in != "USDC" else "ETH",
+    )
+
+    print(
+        f"Reserves: {res0_human.human} {res0_human.symbol} / {res1_human.human}"
+        f" {res1_human.symbol}"
+    )
     print(f"Spot Price: {real_spot:.2f} {token_out_symbol}/{args.token_in}")
 
     results = analyzer.generate_impact_table(token_in_addr, sizes_raw)
@@ -82,7 +96,7 @@ def main():
             )
             continue
 
-        amount_out_human = Decimal(res["amount_out"]) / Decimal(10**decimals_out)
+        amount_out_obj = TokenAmount(res["amount_out"], decimals_out)
 
         # Exec price human readable
         exec_price_fmt = res["execution_price"] * adj_factor
@@ -90,8 +104,8 @@ def main():
         impact_pct = res["price_impact_pct"]
 
         print(
-            f"{f'{input_human:,.0f}'.center(12)} | "
-            f"{f'{amount_out_human:,.4f}'.center(12)} | "
+            f"{f'{input_human:,.2f}'.center(12)} | "
+            f"{f'{amount_out_obj.human:,.4f}'.center(12)} | "
             f"{f'{exec_price_fmt:,.6f}'.center(12)} | "
             f"{f'{impact_pct:.2f}%'.center(10)}"
         )
