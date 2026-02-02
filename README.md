@@ -61,7 +61,7 @@ This project serves as the foundation for an arbitrage trading system. It includ
    - ENV_TYPE=local
    - PRIVATE_KEY=<your_private_key>
    - SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
-   - ALCHEMY_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/ВАШ_КЛЮЧ_ALCHEMY
+   - ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/ВАШ_КЛЮЧ_ALCHEMY
 
 Note: The .env file must never be committed to the repository.
  
