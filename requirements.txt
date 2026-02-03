@@ -9,3 +9,4 @@ pydantic>=2.0.0
 eth-abi
 websockets>=10.0
 pytest-asyncio
+ccxt>=4.0.0
