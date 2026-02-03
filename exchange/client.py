@@ -2,6 +2,7 @@
 import logging
 import ccxt
 from decimal import Decimal
+import time
 
 logger = logging.Logger(__name__)
 
@@ -73,7 +74,7 @@ class ExchangeClient:
 
             return {
                 "symbol": symbol,
-                "timestamp": book.get("timestamp"),
+                "timestamp": book.get("timestamp") or int(time.time() * 1000),
                 "bids": bids,
                 "asks": asks,
                 "best_bid": best_bid,
@@ -106,7 +107,7 @@ class ExchangeClient:
                     result[currency] = {
                         "free": self._to_decimal(raw_balance["free"].get(currency, 0)),
                         "locked": self._to_decimal(
-                            raw_balance["locked"].get(currency, 0)
+                            raw_balance["used"].get(currency, 0)
                         ),
                         "total": self._to_decimal(total_val),
                     }
