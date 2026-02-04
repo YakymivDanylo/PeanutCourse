@@ -63,8 +63,46 @@ def run_check(planner: RebalancePlanner):
         print("─" * 45)
 
 
-# def run_plan(planner: RebalancePlanner, asset: str):
-#     tracker = InventoryTracker()
+def run_plan(planner: RebalancePlanner, asset: str):
+    print(f"\n Rebalance Plan: {asset}")
+    print("=" * 45)
+
+    plans = planner.plan(asset)
+    if not plans:
+        print("No rebalance need or constraints prevent transfer ")
+
+    cost_info = planner.estimate_cost(plans)
+
+    for i, p in enumerate(plans, 1):
+        print(f"Transfer {i}:")
+        print(f"  From:     {p.from_venue.value}")
+        print(f"  To:       {p.to_venue.value}")
+        print(f"  Amount:   {p.amount} {p.asset}")
+        print(f"  Fee:      {p.estimated_fee} {p.asset}")
+        print(f"  ETA:      ~{p.estimated_time_min} min")
+        print("")
+
+        current_heavy = planner.tracker.get_available(p.from_venue, asset)
+        current_light = planner.tracker.get_available(p.to_venue, asset)
+
+        new_heavy = current_heavy - p.amount
+        new_light = current_light + p.net_amount
+        total = new_heavy + new_light
+
+        h_pct = (new_heavy / total) * 100
+        l_pct = (new_light / total) * 100
+
+        print("  Result:")
+        print(
+            f"    {p.from_venue.value.capitalize()}:  {new_heavy} {asset} "
+            f"({h_pct:.0f}%)"
+        )
+        print(
+            f"    {p.to_venue.value.capitalize()}:  {new_light} {asset} ({l_pct:.0f}%)"
+        )
+        print("")
+
+    print(f"Estimated total cost: ${cost_info['total_fees_usd']:.2f}")
 
 
 def main():
@@ -79,8 +117,8 @@ def main():
 
     if args.check:
         run_check(planner)
-    # elif args.plan:
-    #     run_plan(planner, args.plan.upper())
+    elif args.plan:
+        run_plan(planner, args.plan.upper())
     else:
         parser.print_help()
 

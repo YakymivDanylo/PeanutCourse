@@ -118,7 +118,7 @@ class InventoryTracker:
         How much of `asset` is available to trade at `venue`.
         Returns free balance only (not locked in orders).
         """
-        if asset not in self._balances:
+        if asset not in self._balances[venue]:
             return Decimal("0")
         return self._balances[venue][asset].free
 
