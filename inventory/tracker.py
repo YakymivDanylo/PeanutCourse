@@ -1,9 +1,8 @@
-# inventory/tracker.py
-
 from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
 
 
 class Venue(str, Enum):
@@ -69,7 +68,7 @@ class InventoryTracker:
             bal.locked = Decimal("0")
         self.last_update = datetime.now(timezone.utc)
 
-    def snapshot(self) -> dict:
+    def snapshot(self, prices: Optional[dict[str, Decimal]] = None) -> dict:
         """
         Full portfolio snapshot at current time.
 
@@ -89,6 +88,7 @@ class InventoryTracker:
         """
         venus_data = {}
         totals = {}
+
         for venue in self.venues:
             v_data = {}
             for asset, bal in self._balances[venue].items():
@@ -100,10 +100,17 @@ class InventoryTracker:
                 totals[asset] = totals.get(asset, Decimal("0")) + bal.total
             venus_data[venue.value] = v_data
 
+        total_usd = Decimal("0")
+        if prices:
+            for asset, amount in totals.items():
+                price = prices.get(asset, Decimal("0"))
+                total_usd += price * amount
+
         return {
             "timestamp": datetime.now(timezone.utc),
             "venues": venus_data,
             "total": totals,
+            "total_usd": total_usd,
         }
 
     def get_available(self, venue: Venue, asset: str) -> Decimal:
