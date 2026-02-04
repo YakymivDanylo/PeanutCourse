@@ -220,7 +220,7 @@ class InventoryTracker:
         venue_totals = {}
 
         for venue in self.venues:
-            amount = self._get_balance[venue].get(asset, Balance(venue, asset)).total
+            amount = self._balances[venue].get(asset, Balance(venue, asset)).total
             venue_totals[venue] = amount
             total += amount
 
@@ -235,13 +235,18 @@ class InventoryTracker:
                 if abs(deviation) > max_dev:
                     max_dev = abs(deviation)
 
-                venue_res = {
+                venue_res[venue.value] = {
                     "amount": amount,
                     "pct": pct,
                     "deviation": deviation,
                 }
         else:
-            venue_res = {"amount": Decimal("0"), "pct": 0.0, "deviation": Decimal("0")}
+            for venue in self.venues:
+                venue_res[venue.value] = {
+                    "amount": Decimal("0"),
+                    "pct": 0.0,
+                    "deviation_pct": 0.0,
+                }
 
         return {
             "asset": asset,
