@@ -109,7 +109,7 @@ class InventoryTracker:
         return {
             "timestamp": datetime.now(timezone.utc),
             "venues": venus_data,
-            "total": totals,
+            "totals": totals,
             "total_usd": total_usd,
         }
 
@@ -163,7 +163,7 @@ class InventoryTracker:
             )
 
         return {
-            "can_execute": buy_ok or sell_ok,
+            "can_execute": buy_ok and sell_ok,
             "buy_venue_available": buy_avail,
             "buy_venue_needed": buy_amount,
             "sell_venue_available": sell_avail,
@@ -193,10 +193,10 @@ class InventoryTracker:
         fee_bal = self._get_balance(venue, fee_asset)
 
         if side == "buy":
-            base_bal.free -= base_amount
-            quote_bal.free += quote_amount
-        elif side == "sell":
             base_bal.free += base_amount
+            quote_bal.free -= quote_amount
+        elif side == "sell":
+            base_bal.free -= base_amount
             quote_bal.free += quote_amount
         fee_bal.free -= fee
 
