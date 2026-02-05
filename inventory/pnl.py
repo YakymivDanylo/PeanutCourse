@@ -154,7 +154,28 @@ class PnLEngine:
         Last N trades as summary dicts.
         For display in CLI dashboard.
         """
-        ...
+        recent_trades = self.trades[-n:]
+        results = []
+        for t in recent_trades:
+            time_str = t.timestamp.strftime("%H:%M")
+            desc = (
+                f"Buy {t.buy_leg.venue.value.capitalize()} /"
+                f"Sell {t.sell_leg.venue.value.capitalize()} "
+            )
+            sign = "+" if t.net_pnl > 0 else ""
+            pnl_str = f"{sign}${t.net_pnl:.2f} ({t.net_pnl_bps:.1f} bps)"
+            icon = "✅" if t.net_pnl > 0 else "❌"
+
+            results.append(
+                {
+                    "time_str": time_str,
+                    "pair": t.buy_leg.symbol,
+                    "desc": desc,
+                    "pnl_str": pnl_str,
+                    "icon": icon,
+                }
+            )
+        return results
 
     def export_csv(self, filepath: str):
         """Export all trades to CSV for analysis."""
