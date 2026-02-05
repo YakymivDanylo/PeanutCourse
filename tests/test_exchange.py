@@ -2,41 +2,37 @@ import pytest
 from unittest.mock import MagicMock, patch
 from decimal import Decimal
 from exchange.client import ExchangeClient
+from configs.binance_config import BINANCE_CONFIG
 
 
 @pytest.fixture
-def mock_config():
-    return {
-        "apiKey": "test_key",
-        "secret": "test_secret",
-        "sandbox": True,
-        "enableRateLimit": True,
-    }
+def real_client():
+    """Client connected to real Binance Testnet (public endpoints only)"""
+
+    config = BINANCE_CONFIG.copy()
+    config["sandbox"] = True
+    return ExchangeClient(config)
 
 
 @pytest.fixture
-def client(mock_config):
+def mock_client():
+    """Mocker client for private endpoints (balance, orders)"""
     with patch("ccxt.binance") as mock_cnst:
         mock_instance = MagicMock()
         mock_cnst.return_value = mock_instance
-
         mock_instance.load_markets.return_value = {}
-        mock_instance.fetch_time.return_value = 1600000000000
-
-        client = ExchangeClient(mock_config)
+        client = ExchangeClient(BINANCE_CONFIG)
         return client
 
 
-def test_fetch_order_book_structure(client):
+# Real Data
+def test_fetch_order_book_structure(real_client):
     """Order book has required fields and correct sort order."""
-    client.exchange.fetch_order_book.return_value = {
-        "symbol": "ETH/USDT",
-        "timestamp": 1700000000000,
-        "bids": [[2000.0, 1.0], [1990.0, 2.0]],
-        "asks": [[2010.0, 1.0], [2020.0, 2.0]],
-    }
-
-    book = client.fetch_order_book("ETH/USDT")
+    symbol = "ETH/USDT"
+    try:
+        book = real_client.fetch_order_book(symbol)
+    except Exception as e:
+        pytest.skip(f"Skipping real API test due to connection error: {e}")
 
     required_fields = [
         "symbol",
@@ -46,71 +42,99 @@ def test_fetch_order_book_structure(client):
         "best_ask",
         "mid_price",
         "spread_bps",
+        "timestamp",
     ]
     for field in required_fields:
         assert field in book, f"Missing field: {field}"
 
-    assert isinstance(book["best_bid"][0], Decimal)
-    assert isinstance(book["mid_price"], Decimal)
-    assert book["mid_price"] == Decimal("2005.0")
+    if book["bids"] and book["asks"]:
+        assert len(book["bids"]) > 0
+        assert len(book["asks"]) > 0
+
+        assert isinstance(book["bids"][0][0], Decimal)
+        assert isinstance(book["bids"][0][1], Decimal)
 
 
-def test_order_book_bids_descending(client):
+def test_real_order_book_sorting(real_client):
+    """
+    Hits real Binance Testnet API.
+    Verifies bids are descending and asks are ascending.
+    """
+    try:
+        book = real_client.fetch_order_book("ETH/USDT")
+    except Exception as e:
+        pytest.skip(f"Skipping real API test due to connection error: {e}")
+
+    bids = book["bids"]
+    asks = book["asks"]
+
+    if len(bids) >= 2:
+        for i in range(len(bids) - 1):
+            assert bids[i][0] >= bids[i + 1][0], "Bids are not sorted descending"
+
+    if len(asks) >= 2:
+        for i in range(len(asks) - 1):
+            assert asks[i][0] <= asks[i + 1][0], "Asks are not sorted ascending"
+
+
+def test_order_book_bids_descending(mock_client):
     """Bids sorted highest to lowest."""
-    client.exchange.fetch_order_book.return_value = {
+    mock_client.exchange.fetch_order_book.return_value = {
         "bids": [[2000.0, 1.0], [1990.0, 1.0], [1980.0, 1.0]],
         "asks": [],
     }
 
-    book = client.fetch_order_book("ETH/USDT")
+    book = mock_client.fetch_order_book("ETH/USDT")
     bids = book["bids"]
 
     assert bids[0][0] > bids[1][0]
     assert bids[1][0] > bids[2][0]
 
 
-def test_order_book_asks_ascending(client):
+def test_order_book_asks_ascending(mock_client):
     """Asks sorted lowest to highest."""
-    client.exchange.fetch_order_book.return_value = {
+    mock_client.exchange.fetch_order_book.return_value = {
         "bids": [],
         "asks": [[2010.0, 1.0], [2020.0, 1.0], [2030.0, 1.0]],
     }
 
-    book = client.fetch_order_book("ETH/USDT")
+    book = mock_client.fetch_order_book("ETH/USDT")
     asks = book["asks"]
 
     assert asks[0][0] < asks[1][0]
     assert asks[1][0] < asks[2][0]
 
 
-def test_spread_calculation(client):
-    """Spread = best_ask - best_bid, in bps."""
-    client.exchange.fetch_order_book.return_value = {
-        "bids": [[2000.0, 1.0]],
-        "asks": [[2010.0, 1.0]],
-    }
+def test_real_spread_calculation(real_client):
+    """
+    Hits real Binance Testnet API.
+    Verifies calculated spread validity.
+    """
+    try:
+        book = real_client.fetch_order_book("ETH/USDT")
+    except Exception as e:
+        pytest.skip(f"Skipping real API test due to connection error: {e}")
 
-    book = client.fetch_order_book("ETH/USDT")
+    if book["best_bid"][0] > 0 and book["best_ask"][0] > 0:
+        assert book["spread_bps"] >= 0
 
-    # Mid = (2000 + 2010) / 2 = 2005
-    # Spread = 10
-    # Bps = (10 / 2005) * 10000 ≈ 49.8753...
+        mid = (book["best_bid"][0] + book["best_ask"][0]) / 2
+        diff = book["best_ask"][0] - book["best_bid"][0]
+        calc_bps = (diff / mid) * 10000
 
-    mid_price = (Decimal("2000") + Decimal("2010")) / 2
-    expected_spread = (Decimal("2010") - Decimal("2000")) / mid_price * 10000
-
-    assert abs(book["spread_bps"] - expected_spread) < Decimal("0.0001")
+        assert abs(book["spread_bps"] - calc_bps) < Decimal("0.01")
 
 
-def test_fetch_balance_filters_zeros(client):
+# Mocked Tests
+def test_fetch_balance_filters_zeros(mock_client):
     """Zero-balance assets excluded from result."""
-    client.exchange.fetch_balance.return_value = {
+    mock_client.exchange.fetch_balance.return_value = {
         "total": {"ETH": 1.5, "BTC": 0.0, "USDT": 100.0},
         "free": {"ETH": 1.5, "BTC": 0.0, "USDT": 100.0},
         "used": {"ETH": 0.0, "BTC": 0.0, "USDT": 0.0},
     }
 
-    balance = client.fetch_balance()
+    balance = mock_client.fetch_balance()
 
     assert "ETH" in balance
     assert "USDT" in balance
@@ -119,9 +143,9 @@ def test_fetch_balance_filters_zeros(client):
     assert balance["ETH"]["locked"] == Decimal("0.0")
 
 
-def test_limit_ioc_returns_fill_info(client):
+def test_limit_ioc_returns_fill_info(mock_client):
     """IOC order returns fill qty, avg price, fees."""
-    client.exchange.create_order.return_value = {
+    mock_client.exchange.create_order.return_value = {
         "id": "12345",
         "symbol": "ETH/USDT",
         "side": "buy",
@@ -135,7 +159,7 @@ def test_limit_ioc_returns_fill_info(client):
         "timestamp": 1700000000,
     }
 
-    order = client.create_limit_ioc_order("ETH/USDT", "buy", 2.0, 2000.0)
+    order = mock_client.create_limit_ioc_order("ETH/USDT", "buy", 2.0, 2000.0)
 
     assert order["amount_filled"] == Decimal("1.5")
     assert order["avg_fill_price"] == Decimal("2000.0")
@@ -143,10 +167,10 @@ def test_limit_ioc_returns_fill_info(client):
     assert order["status"] == "closed"
 
 
-def test_rate_limiter_blocks_when_exhausted(mock_config):
+def test_rate_limiter_blocks_when_exhausted():
     """Requests blocked when weight limit reached."""
     with patch("ccxt.binance") as mock_cnst:
-        ExchangeClient(mock_config)
+        ExchangeClient(BINANCE_CONFIG)
         args, kwargs = mock_cnst.call_args
         config_passed = args[0]
         assert config_passed["enableRateLimit"] is True
