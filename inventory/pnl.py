@@ -1,4 +1,5 @@
 # inventory/pnl.py
+import csv
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
@@ -121,7 +122,7 @@ class PnLEngine:
         total_notional = sum(t.notional for t in self.trades)
 
         count = len(self.trades)
-        win_rate = (wins / count) * 100 if count > 0 else 0.0
+        win_rate = (len(wins) / count) * 100 if count > 0 else 0.0
 
         # Sharpe Estimate: Mean PnL / StdDev PnL
         mean_pnl = total_pnl / count
@@ -179,4 +180,44 @@ class PnLEngine:
 
     def export_csv(self, filepath: str):
         """Export all trades to CSV for analysis."""
-        ...
+        headers = [
+            "id",
+            "timestamp",
+            "symbol",
+            "buy_venue",
+            "buy_price",
+            "sell_venue",
+            "sell_price",
+            "amount",
+            "gross_pnl",
+            "gas_cost",
+            "total_fees",
+            "net_pnl",
+            "net_pnl_bps",
+        ]
+
+        try:
+            with open(filepath, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+
+                for t in self.trades:
+                    writer.writerow(
+                        [
+                            t.id,
+                            t.timestamp.isoformat(),
+                            t.buy_leg.symbol,
+                            t.buy_leg.venue.value,
+                            t.buy_leg.price,
+                            t.sell_leg.venue.value,
+                            t.sell_leg.price,
+                            t.buy_leg.amount,
+                            t.gross_pnl,
+                            t.gas_cost_usd,
+                            t.total_fees,
+                            t.net_pnl,
+                            t.net_pnl_bps,
+                        ]
+                    )
+        except IOError as e:
+            print(f"Error writing CSV: {e}")
