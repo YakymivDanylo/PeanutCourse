@@ -16,71 +16,77 @@ def main():
     parser.add_argument(
         "--summary", action="store_true", help="Show PnL summary and recent trades"
     )
+    parser.add_argument(
+        "--export",
+        type=str,
+        help="Export PnL summary to CSV file (provide filename)",
+        default=None,
+    )
     args = parser.parse_args()
 
+    engine = PnLEngine()
+    base_time = datetime.now(timezone.utc)
+
+    t1 = ArbRecord(
+        id="1",
+        timestamp=base_time,
+        buy_leg=TradeLeg(
+            "L1",
+            base_time,
+            Venue.BINANCE,
+            "ETH/USDT",
+            "buy",
+            Decimal("1.0"),
+            Decimal("2000"),
+            Decimal("1.0"),
+            "USDT",
+        ),
+        sell_leg=TradeLeg(
+            "L2",
+            base_time,
+            Venue.WALLET,
+            "ETH/USDT",
+            "sell",
+            Decimal("1.0"),
+            Decimal("2010"),
+            Decimal("2.0"),
+            "USDT",
+        ),
+        gas_cost_usd=Decimal("2.0"),
+    )
+
+    engine.record(t1)
+
+    t2 = ArbRecord(
+        id="2",
+        timestamp=base_time,
+        buy_leg=TradeLeg(
+            "L3",
+            base_time,
+            Venue.WALLET,
+            "ETH/USDT",
+            "buy",
+            Decimal("1.0"),
+            Decimal("2005"),
+            Decimal("2.0"),
+            "USDT",
+        ),
+        sell_leg=TradeLeg(
+            "L4",
+            base_time,
+            Venue.BINANCE,
+            "ETH/USDT",
+            "sell",
+            Decimal("1.0"),
+            Decimal("2006"),
+            Decimal("1.0"),
+            "USDT",
+        ),
+        gas_cost_usd=Decimal("1.5"),
+    )
+    engine.record(t2)
+
     if args.summary:
-        engine = PnLEngine()
-        base_time = datetime.now(timezone.utc)
-
-        t1 = ArbRecord(
-            id="1",
-            timestamp=base_time,
-            buy_leg=TradeLeg(
-                "L1",
-                base_time,
-                Venue.BINANCE,
-                "ETH/USDT",
-                "buy",
-                Decimal("1.0"),
-                Decimal("2000"),
-                Decimal("1.0"),
-                "USDT",
-            ),
-            sell_leg=TradeLeg(
-                "L2",
-                base_time,
-                Venue.WALLET,
-                "ETH/USDT",
-                "sell",
-                Decimal("1.0"),
-                Decimal("2010"),
-                Decimal("2.0"),
-                "USDT",
-            ),
-            gas_cost_usd=Decimal("2.0"),
-        )
-
-        engine.record(t1)
-
-        t2 = ArbRecord(
-            id="2",
-            timestamp=base_time,
-            buy_leg=TradeLeg(
-                "L3",
-                base_time,
-                Venue.WALLET,
-                "ETH/USDT",
-                "buy",
-                Decimal("1.0"),
-                Decimal("2005"),
-                Decimal("2.0"),
-                "USDT",
-            ),
-            sell_leg=TradeLeg(
-                "L4",
-                base_time,
-                Venue.BINANCE,
-                "ETH/USDT",
-                "sell",
-                Decimal("1.0"),
-                Decimal("2006"),
-                Decimal("1.0"),
-                "USDT",
-            ),
-            gas_cost_usd=Decimal("1.5"),
-        )
-        engine.record(t2)
-
         stats = engine.summary()
 
         print("\nPnL Summary (last 24h)")
@@ -102,6 +108,15 @@ def main():
                 f"  {t['time_str']}  {t['pair']:<8} {t['desc']:<30} "
                 f"{t['pnl_str']:<20} {t['icon']}"
             )
+
+    if args.export:
+        filename = args.export
+        if not filename.endswith(".csv"):
+            filename += ".csv"
+
+        print("\nExporting data to csv file")
+        engine.export_csv(filename)
+        print("Done!")
 
 
 if __name__ == "__main__":
