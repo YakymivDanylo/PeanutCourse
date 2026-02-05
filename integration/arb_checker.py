@@ -255,7 +255,7 @@ if __name__ == "__main__":
             TOKEN_MAP["USDC"]
         ):
             amt_usd = Decimal(amount_in) / 10**6
-            out_eth = amt_usd / Decimal("2007.21")
+            out_eth = amt_usd / Decimal("1900.00")
             q.expected_output = int(out_eth * 10**18)
             return q
 
