@@ -1,5 +1,7 @@
 # integration/arb_checker.py
 import argparse
+import csv
+from datetime import datetime, timezone
 import sys
 import os
 from decimal import Decimal
@@ -28,6 +30,8 @@ DECIMALS = {
     "USDT": 6,
 }
 
+OPPORTUNITIES_FILE = "opportunities.csv"
+
 
 class ArbChecker:
     """
@@ -45,6 +49,43 @@ class ArbChecker:
         self.exchange = exchange_client
         self.inventory = inventory_tracker
         self.pnl = pnl_engine
+        self._init_csv()
+
+    def _init_csv(self):
+        """Initialize CSV file with headers if it doesn't exist."""
+        if not os.path.exists(OPPORTUNITIES_FILE):
+            with open(OPPORTUNITIES_FILE, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "timestamp",
+                        "pair",
+                        "direction",
+                        "gap_bps",
+                        "est_net_pnl_bps",
+                        "gas_cost_usd",
+                        "executable",
+                    ]
+                )
+
+    def _log_opportunity(self, data: dict):
+        """Append opportunity details to CSV."""
+        try:
+            with open(OPPORTUNITIES_FILE, "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        datetime.now(timezone.utc).isoformat(),
+                        data.get("pair"),
+                        data.get("direction"),
+                        f"{data.get('gap_bps', 0):.2f}",
+                        f"{data.get('estimated_net_pnl_bps', 0):.2f}",
+                        f"{data.get('details', {}).get('gas_cost_usd', 0):.2f}",
+                        data.get("executable"),
+                    ]
+                )
+        except IOError as e:
+            print(f"Error logging opportunity: {e}")
 
     def check(self, pair: str, size: float) -> dict:
         base_sym, quote_sym = pair.split("/")
@@ -127,7 +168,6 @@ class ArbChecker:
             gap_2 = Decimal("-inf")
             dex_sell_quote = None
 
-        # --- Select Best Direction ---
         if gap_1 > gap_2:
             direction = "buy_dex_sell_cex"
             dex_price = dex_buy_price
@@ -158,7 +198,6 @@ class ArbChecker:
             cex_asset_name = quote_sym
             cex_needed = size_dec * cex_buy_price
 
-        # --- Costs ---
         cex_fees_data = self.exchange.get_trading_fees(pair)
         cex_fee_bps = cex_fees_data.get("taker", Decimal("0.001")) * 10000
         dex_fee_bps = Decimal("30.0")
@@ -179,7 +218,6 @@ class ArbChecker:
         gap_bps = (gap_usd / dex_price * 10000) if dex_price > 0 else Decimal("0")
         net_pnl_bps = gap_bps - total_costs_bps
 
-        # --- Inventory Check ---
         wallet_bal = self.inventory.get_available(Venue.WALLET, wallet_asset_name)
         cex_bal_raw = self.inventory.get_available(Venue.BINANCE, cex_asset_name)
         cex_bal = (
@@ -190,7 +228,7 @@ class ArbChecker:
 
         inv_ok = (wallet_bal >= wallet_needed) and (cex_bal >= cex_needed)
 
-        return {
+        result = {
             "pair": pair,
             "dex_price": dex_price,
             "cex_price": cex_price,
@@ -218,6 +256,10 @@ class ArbChecker:
                 "cex_need": cex_needed,
             },
         }
+
+        self._log_opportunity(result)
+
+        return result
 
 
 if __name__ == "__main__":
@@ -255,7 +297,7 @@ if __name__ == "__main__":
             TOKEN_MAP["USDC"]
         ):
             amt_usd = Decimal(amount_in) / 10**6
-            out_eth = amt_usd / Decimal("1900.00")
+            out_eth = amt_usd / Decimal("2007.21")
             q.expected_output = int(out_eth * 10**18)
             return q
 

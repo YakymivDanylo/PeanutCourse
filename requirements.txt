@@ -10,3 +10,6 @@ eth-abi
 websockets>=10.0
 pytest-asyncio
 ccxt>=4.0.0
+rich>=13.0.0
+matplotlib>=3.7.0
+pandas>=2.0.0

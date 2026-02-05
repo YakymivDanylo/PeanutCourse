@@ -221,3 +221,44 @@ class PnLEngine:
                     )
         except IOError as e:
             print(f"Error writing CSV: {e}")
+
+    def load_from_csv(self, filepath: str):
+        """
+        Load trades from a CSV file into memory.
+        Note: This is a simplified loader for visualization purposes.
+        """
+        try:
+            with open(filepath, "r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        ts = datetime.fromisoformat(row["timestamp"])
+                    except ValueError:
+                        continue
+
+                    mock_leg = TradeLeg(
+                        id="load",
+                        timestamp=ts,
+                        venue=Venue.BINANCE,
+                        symbol=row["symbol"],
+                        side="buy",
+                        amount=Decimal(row["amount"]),
+                        price=Decimal(row["buy_price"]),
+                        fee=Decimal("0"),
+                        fee_asset="USDT",
+                    )
+
+                    record = ArbRecord(
+                        id=row["id"],
+                        timestamp=ts,
+                        buy_leg=mock_leg,
+                        sell_leg=mock_leg,
+                        gas_cost_usd=Decimal(row["gas_cost"]),
+                    )
+
+                    record.stored_net_pnl = Decimal(row["net_pnl"])
+
+                    self.trades.append(record)
+
+        except FileNotFoundError:
+            print(f"File {filepath} not found.")
