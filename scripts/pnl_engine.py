@@ -4,7 +4,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
+from datetime import datetime, timezone, timedelta  # noqa: E402
 from decimal import Decimal  # noqa: E402
 
 from inventory.pnl import PnLEngine, ArbRecord, TradeLeg  # noqa: E402
@@ -29,10 +29,10 @@ def main():
 
     t1 = ArbRecord(
         id="1",
-        timestamp=base_time,
+        timestamp=base_time - timedelta(minutes=120),
         buy_leg=TradeLeg(
             "L1",
-            base_time,
+            base_time - timedelta(minutes=120),
             Venue.BINANCE,
             "ETH/USDT",
             "buy",
@@ -43,7 +43,7 @@ def main():
         ),
         sell_leg=TradeLeg(
             "L2",
-            base_time,
+            base_time - timedelta(minutes=120),
             Venue.WALLET,
             "ETH/USDT",
             "sell",
@@ -54,15 +54,14 @@ def main():
         ),
         gas_cost_usd=Decimal("2.0"),
     )
-
     engine.record(t1)
 
     t2 = ArbRecord(
         id="2",
-        timestamp=base_time,
+        timestamp=base_time - timedelta(minutes=90),
         buy_leg=TradeLeg(
             "L3",
-            base_time,
+            base_time - timedelta(minutes=90),
             Venue.WALLET,
             "ETH/USDT",
             "buy",
@@ -73,7 +72,7 @@ def main():
         ),
         sell_leg=TradeLeg(
             "L4",
-            base_time,
+            base_time - timedelta(minutes=90),
             Venue.BINANCE,
             "ETH/USDT",
             "sell",
@@ -85,6 +84,93 @@ def main():
         gas_cost_usd=Decimal("1.5"),
     )
     engine.record(t2)
+
+    t3 = ArbRecord(
+        id="3",
+        timestamp=base_time - timedelta(minutes=60),
+        buy_leg=TradeLeg(
+            "L5",
+            base_time - timedelta(minutes=60),
+            Venue.BINANCE,
+            "ETH/USDT",
+            "buy",
+            Decimal("1.5"),
+            Decimal("2020"),
+            Decimal("1.5"),
+            "USDT",
+        ),
+        sell_leg=TradeLeg(
+            "L6",
+            base_time - timedelta(minutes=60),
+            Venue.WALLET,
+            "ETH/USDT",
+            "sell",
+            Decimal("1.5"),
+            Decimal("2035"),
+            Decimal("3.0"),
+            "USDT",
+        ),
+        gas_cost_usd=Decimal("2.5"),
+    )
+    engine.record(t3)
+
+    t4 = ArbRecord(
+        id="4",
+        timestamp=base_time - timedelta(minutes=30),
+        buy_leg=TradeLeg(
+            "L7",
+            base_time - timedelta(minutes=30),
+            Venue.WALLET,
+            "ETH/USDT",
+            "buy",
+            Decimal("0.5"),
+            Decimal("2015"),
+            Decimal("1.0"),
+            "USDT",
+        ),
+        sell_leg=TradeLeg(
+            "L8",
+            base_time - timedelta(minutes=30),
+            Venue.BINANCE,
+            "ETH/USDT",
+            "sell",
+            Decimal("0.5"),
+            Decimal("2025"),
+            Decimal("0.5"),
+            "USDT",
+        ),
+        gas_cost_usd=Decimal("1.8"),
+    )
+    engine.record(t4)
+
+    t5 = ArbRecord(
+        id="5",
+        timestamp=base_time - timedelta(minutes=10),
+        buy_leg=TradeLeg(
+            "L9",
+            base_time - timedelta(minutes=10),
+            Venue.BINANCE,
+            "ETH/USDT",
+            "buy",
+            Decimal("2.0"),
+            Decimal("2000"),
+            Decimal("2.0"),
+            "USDT",
+        ),
+        sell_leg=TradeLeg(
+            "L10",
+            base_time - timedelta(minutes=10),
+            Venue.WALLET,
+            "ETH/USDT",
+            "sell",
+            Decimal("2.0"),
+            Decimal("2018"),
+            Decimal("4.0"),
+            "USDT",
+        ),
+        gas_cost_usd=Decimal("3.0"),
+    )
+    engine.record(t5)
 
     if args.summary:
         stats = engine.summary()

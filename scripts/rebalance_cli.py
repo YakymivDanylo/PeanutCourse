@@ -31,7 +31,7 @@ def mock_tracker():
     )
 
     tracker.update_from_wallet(
-        Venue.WALLET, {"ETH": Decimal("8.0"), "USDT": Decimal("12000")}
+        Venue.WALLET, {"ETH": Decimal("18.0"), "USDT": Decimal("12000")}
     )
 
     return tracker

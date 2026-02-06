@@ -130,8 +130,8 @@ class ExchangeClient:
             "avg_fill_price": self._to_decimal(
                 order.get("average") or order.get("price")
             ),
-            "fee": self._to_decimal(order.get("fee", {}).get("cost", 0)),
-            "fee_asset": order.get("fee", {}).get("currency", ""),
+            "fee": self._to_decimal((order.get("fee") or {}).get("cost", 0)),
+            "fee_asset": (order.get("fee") or {}).get("currency", ""),
             "status": order["status"],
             "timestamp": order["timestamp"],
         }
