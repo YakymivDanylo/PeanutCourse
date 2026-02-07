@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from dotenv import load_dotenv
 
+from exchange.orderbook import OrderBookAnalyzer
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from configs.binance_config import BINANCE_CONFIG  # noqa: E402
@@ -103,75 +105,122 @@ class ArbChecker:
         size_dec = Decimal(str(size))
         base_sym, quote_sym = pair.split("/")
 
-        book = self.exchange.fetch_order_book(pair)
-        best_bid = Decimal(book["best_bid"][0])
-        best_ask = Decimal(book["best_ask"][0])
+        book_data = self.exchange.fetch_order_book(pair)
+        ob_analyzer = OrderBookAnalyzer(book_data)
+
+        # Cost to buy size (Ask)
+        cex_buy_sim = ob_analyzer.walk_the_book("buy", size)
+        cex_ask_exec = cex_buy_sim["avg_price"]
+        cex_buy_slippage = cex_buy_sim["slippage_bps"]
+
+        # Cost to sell size(Bid)
+        cex_sell_sim = ob_analyzer.walk_the_book("sell", size)
+        cex_bid_exec = cex_sell_sim["avg_price"]
+        cex_sell_slippage = cex_sell_sim["slippage_bps"]
 
         cex_fees = self.exchange.get_trading_fees(pair)
         cex_fee_bps = Decimal(cex_fees.get("taker", "0.001")) * 10000
 
         if not self.chain:
-            raise ValueError("ChainClient is required for Real Arb Check")
+            raise ValueError("Chain Client is required for Arb Checker.")
 
         pool = UniswapV2Pair.from_chain(USDC_WETH_POOL, self.chain)
 
-        weth_addr = TOKEN_MAP["WETH"]
+        base_addr = TOKEN_MAP.get(base_sym, TOKEN_MAP["WETH"])
 
-        if pool.token0 == weth_addr:
-            weth_res = Decimal(pool.reserve0) / Decimal(10 ** DECIMALS["WETH"])
-            usdc_res = Decimal(pool.reserve1) / Decimal(10 ** DECIMALS["USDC"])
-        else:
-            usdc_res = Decimal(pool.reserve0) / Decimal(10 ** DECIMALS["USDC"])
-            weth_res = Decimal(pool.reserve1) / Decimal(10 ** DECIMALS["WETH"])
+        base_decimals = DECIMALS.get(base_sym, 18)
+        quote_decimals = DECIMALS.get(quote_sym, 6)
 
-        dex_spot_price = usdc_res / weth_res
+        size_int = int(size_dec * (10**base_decimals))
 
-        gap_1 = best_bid - dex_spot_price
-        gap_2 = dex_spot_price - best_ask
+        raw_spot_ratio = pool.get_spot_price(base_addr)  # Price of Base in Quote (Raw)
+        adj_factor = Decimal(10**base_decimals) / Decimal(10**quote_decimals)
+        dex_spot_price = raw_spot_ratio * adj_factor
+
+        # Scenario A: Sell on DEX (Input Base -> Output Quote)
+        # We give 'size' ETH, we get X USDT
+        try:
+            amount_out_quote = pool.get_amount_out(size_int, base_addr)
+            dex_bid_exec = (
+                Decimal(amount_out_quote) / (10**quote_decimals)
+            ) / size_dec
+        except ValueError:
+            dex_bid_exec = Decimal("0")
+
+        # Scenario B: Buy on DEX (Input Quote -> Output Base)
+        # We want 'size' ETH, how much USDT do we need?
+        try:
+            amount_in_quote = pool.get_amount_in(size_int, base_addr)
+            dex_ask_exec = (
+                Decimal(amount_in_quote) / (10**quote_decimals)
+            ) / size_dec
+        except ValueError:
+            dex_ask_exec = Decimal("0")
+
+        # Calculate gaps using exec price
+
+        # buy dex, sell cex
+        gap_1 = cex_bid_exec - dex_ask_exec
+
+        # buy cex, sell dex
+        gap_2 = dex_bid_exec - cex_ask_exec
 
         direction = ""
-        dex_price = Decimal("0")
-        cex_price = Decimal("0")
+        dex_price_exec = Decimal("0")
+        cex_price_exec = Decimal("0")
         gap_usd = Decimal("0")
-        dex_impact_bps = Decimal("0")
 
-        impact_est = (size_dec / weth_res) * 100
+        final_dex_impact = Decimal("0")
+        final_cex_slippage = Decimal("0")
 
         if gap_1 > gap_2:
             direction = "buy_dex_sell_cex"
-            dex_price = dex_spot_price
-            cex_price = best_bid
+            dex_price_exec = dex_ask_exec
+            cex_price_exec = cex_bid_exec
             gap_usd = gap_1
-            dex_impact_bps = impact_est
+
+            if dex_spot_price > 0:
+                final_dex_impact = (
+                    (dex_price_exec - dex_spot_price) / dex_spot_price
+                ) * 10000
+
+            final_cex_slippage = cex_sell_slippage
 
             wallet_need_asset = quote_sym
-            wallet_need_amt = size_dec * dex_price
+            wallet_need_amt = size_dec * dex_price_exec
             cex_need_asset = base_sym
             cex_need_amt = size_dec
 
         else:
             direction = "buy_cex_sell_dex"
-            dex_price = dex_spot_price
-            cex_price = best_ask
+            dex_price_exec = dex_bid_exec
+            cex_price_exec = cex_ask_exec
             gap_usd = gap_2
-            dex_impact_bps = impact_est
+
+            if dex_spot_price > 0:
+                final_dex_impact = (
+                    (dex_spot_price - dex_price_exec) / dex_spot_price
+                ) * 10000
+
+            final_cex_slippage = cex_buy_slippage
 
             wallet_need_asset = base_sym
             wallet_need_amt = size_dec
             cex_need_asset = quote_sym
-            cex_need_amt = size_dec * cex_price
+            cex_need_amt = size_dec * cex_price_exec
 
         gas_cost_usd = Decimal("5.00")
-        notional = size_dec * dex_price
+        notional = size_dec * dex_price_exec
         gas_bps = (gas_cost_usd / notional * 10000) if notional > 0 else Decimal("0")
-        dex_fee_bps = Decimal("30.0")
-        cex_slippage_bps = Decimal("0.0")
 
-        total_costs_bps = (
-            dex_fee_bps + dex_impact_bps + cex_fee_bps + cex_slippage_bps + gas_bps
+        dex_fee_bps = Decimal("30.0")
+
+        total_costs_bps = cex_fee_bps + gas_bps
+
+        gap_bps = (
+            (gap_usd / dex_price_exec * 10000) if dex_price_exec > 0 else Decimal("0")
         )
 
-        gap_bps = (gap_usd / dex_price * 10000) if dex_price > 0 else Decimal("0")
         net_pnl_bps = gap_bps - total_costs_bps
 
         wallet_bal = self.inventory.get_available(Venue.WALLET, wallet_need_asset)
@@ -179,24 +228,33 @@ class ArbChecker:
         cex_bal = cex_bal_data if isinstance(cex_bal_data, Decimal) else Decimal("0")
 
         inv_ok = (wallet_bal >= wallet_need_amt) and (cex_bal >= cex_need_amt)
-        executable = inv_ok and (net_pnl_bps > 0)
+        is_profitable = net_pnl_bps > 0
+        executable = inv_ok and is_profitable
+
+        if not is_profitable:
+            verdict = "SKIP — not profitable"
+        elif not inv_ok:
+            verdict = "SKIP — insufficient inventory"
+        else:
+            verdict = "EXECUTE"
 
         result = {
             "pair": pair,
-            "dex_price": dex_price,
-            "cex_price": cex_price,
+            "dex_price": dex_price_exec,
+            "cex_price": cex_price_exec,
             "gap_usd": gap_usd,
             "gap_bps": gap_bps,
             "direction": direction,
-            "estimated_costs_bps": total_costs_bps,
+            "estimated_costs_bps": total_costs_bps,  # Displaying external costs
             "estimated_net_pnl_bps": net_pnl_bps,
             "inventory_ok": inv_ok,
             "executable": executable,
+            "verdict": verdict,
             "details": {
                 "dex_fee_bps": dex_fee_bps,
-                "dex_impact_bps": dex_impact_bps,
+                "dex_impact_bps": final_dex_impact,
                 "cex_fee_bps": cex_fee_bps,
-                "cex_slippage_bps": cex_slippage_bps,
+                "cex_slippage_bps": final_cex_slippage,
                 "gas_cost_usd": gas_cost_usd,
                 "gas_bps": gas_bps,
             },
@@ -276,27 +334,38 @@ def main():
     res = checker.check(args.pair, args.size)
 
     print("\n═══════════════════════════════════════════")
-    print(f"  ARB CHECK: {res['pair']} (size: {args.size} ETH)")
+    print(f"  REAL EXECUTION CHECK: {res['pair']} (size: {args.size} ETH)")
     print("═══════════════════════════════════════════")
 
-    dex_lbl = "buy" if res["direction"] == "buy_dex_sell_cex" else "sell"
-    cex_lbl = "bid" if res["direction"] == "buy_dex_sell_cex" else "ask"
+    if res["direction"] == "buy_dex_sell_cex":
+        dir_label = "Buy Uniswap -> Sell Binance"
+        dex_side = "Ask (Buy)"
+        cex_side = "Bid (Sell)"
+    else:
+        dir_label = "Buy Binance -> Sell Uniswap"
+        dex_side = "Bid (Sell)"
+        cex_side = "Ask (Buy)"
 
-    print("\nPrices:")
-    print(f"  Uniswap V2:      ${res['dex_price']:,.2f} ({dex_lbl} {args.size:g} ETH)")
-    print(f"  Binance {cex_lbl}:      ${res['cex_price']:,.2f}")
+    print(f"\nStrategy: {dir_label}")
+
+    print("\nPrices (Volume-Weighted):")
+
+    print(
+        f"  Uniswap V2 {dex_side}:    ${res['dex_price']:,.2f} (Includes Impact & Fee)"
+    )
+    print(f"  Binance {cex_side}:       ${res['cex_price']:,.2f} (Includes Slippage)")
 
     print(f"\nGap: ${res['gap_usd']:,.2f} ({res['gap_bps']:.1f} bps)")
 
     d = res["details"]
-    print("\nCosts:")
-    print(f"  DEX fee:           {d['dex_fee_bps']:.1f} bps")
-    print(f"  DEX price impact:   {d['dex_impact_bps']:.1f} bps")
+    print("\nMetrics:")
+    print("  DEX fee (30bps):   [Included in Price]")
+    print(f"  DEX price impact:  {d['dex_impact_bps']:.1f} bps")
+    print(f"  CEX slippage:      {d['cex_slippage_bps']:.1f} bps")
+    print("\nAdditional Costs:")
     print(f"  CEX fee:           {d['cex_fee_bps']:.1f} bps")
-    print(f"  CEX slippage:       {d['cex_slippage_bps']:.1f} bps")
     print(f"  Gas:               ${d['gas_cost_usd']:.2f} ({d['gas_bps']:.1f} bps)")
     print("  ────────────────────────")
-    print(f"  Total costs:       {res['estimated_costs_bps']:.1f} bps")
 
     pnl_sign = "✅" if res["estimated_net_pnl_bps"] > 0 else "❌"
     label = "PROFITABLE" if res["estimated_net_pnl_bps"] > 0 else "NOT PROFITABLE"
@@ -314,8 +383,7 @@ def main():
     print_inv_line("Wallet", inv["wallet_asset"], inv["wallet_bal"], inv["wallet_need"])
     print_inv_line("Binance", inv["cex_asset"], inv["cex_bal"], inv["cex_need"])
 
-    verdict = "EXECUTE" if res["executable"] else "SKIP — costs exceed gap"
-    print(f"\nVerdict: {verdict}")
+    print(f"\nVerdict: {res['verdict']}")
     print("═══════════════════════════════════════════")
 
 
