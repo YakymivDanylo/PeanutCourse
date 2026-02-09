@@ -296,6 +296,50 @@ performance reporting.
   Automatically triggered during **Part 6** execution. All discovered opportunities are logged to `opportunities.csv`
   for further analysis.
 
+### System Architecture
+```mermaid
+graph TD
+    classDef external fill:#ffcccc,stroke:#b30000,stroke-width:2px,color:black;
+    classDef core fill:#e6f7ff,stroke:#006699,stroke-width:2px,color:black;
+    classDef logic fill:#e6ffec,stroke:#009933,stroke-width:2px,color:black;
+
+    subgraph External_Systems [External Systems]
+        Binance[Binance Testnet CEX]:::external
+        Ethereum[Ethereum Network DEX/RPC]:::external
+    end
+
+    subgraph Week3_Architecture [Week 3 Architecture]
+        
+        ArbChecker("<b>ArbChecker</b><br/>Integrates Pricing + Exchange + Inventory<br/>Calculate PnL estimates"):::logic
+        PnLEngine("<b>PnLEngine</b><br/>Track per-trade PnL<br/>Aggregate stats"):::core
+
+        ExchangeClient("<b>ExchangeClient</b><br/>Fetch OrderBook<br/>Place/Cancel LIMIT IOC<br/>Rate Limiting"):::core
+        ChainClient("<b>ChainClient</b><br/>Connects to DEX"):::core
+
+        OrderBookAnalyzer("<b>OrderBookAnalyzer</b><br/>Walk the book (simulate fills)<br/>Depth/Spread/Imbalance analysis"):::core
+        InventoryTracker("<b>InventoryTracker</b><br/>Aggregate balances<br/>Validate trade legs (can_execute)<br/>Detect Skew"):::core
+        RebalancePlanner("<b>RebalancePlanner</b><br/>Generate transfer plans<br/>Respect min operating balances"):::core
+    end
+
+
+    ExchangeClient -- "Fetch Data / Send Orders (LIMIT IOC)" --> Binance
+    ChainClient -- "RPC Calls / Swaps" --> Ethereum
+
+    ArbChecker -- "Requests data" --> ExchangeClient
+    ArbChecker -- "Requests data" --> ChainClient
+    
+    ExchangeClient -- "Raw OrderBook" --> OrderBookAnalyzer
+    OrderBookAnalyzer -- "Liquidity Metrics (Price, Slippage)" --> ArbChecker
+
+    InventoryTracker -. "Polls updates" .-> ExchangeClient
+    InventoryTracker -. "Polls updates" .-> ChainClient
+    ArbChecker -- "Check: can_execute?" --> InventoryTracker
+    
+    RebalancePlanner -- "Monitors for Skew" --> InventoryTracker
+
+    ArbChecker -- "Log Trade Results" --> PnLEngine
+```
+
 ## Key Features & Design Decisions
 
 * **Unified Inventory**: Provides a seamless interface to track assets across CEX (via Binance API) and DEX (via
