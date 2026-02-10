@@ -23,9 +23,9 @@ def mock_tracker():
                 "total": Decimal("2.0"),
             },
             "USDT": {
-                "free": Decimal("18000"),
+                "free": Decimal("1000"),
                 "locked": Decimal("0"),
-                "total": Decimal("18000"),
+                "total": Decimal("1000"),
             },
         },
     )
@@ -58,7 +58,7 @@ def run_check(planner: RebalancePlanner):
                 f" ← deviation: {dev_str}"
             )
 
-        status = "⚠️ NEED REBALANCE" if skew["needs_rebalance"] else "✅ OK )"
+        status = "⚠️ NEED REBALANCE" if skew["needs_rebalance"] else "✅ OK"
         print(f"  Status: {status}")
         print("─" * 45)
 

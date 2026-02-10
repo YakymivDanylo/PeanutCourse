@@ -157,7 +157,7 @@ class Dashboard:
         layout["header"].update(
             Panel(
                 Text(
-                    " 🥜 PEANUT BOT DASHBOARD ",
+                    " TRADE BOT DASHBOARD ",
                     justify="center",
                     style="bold white on blue",
                 )
