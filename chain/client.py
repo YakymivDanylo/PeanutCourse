@@ -161,3 +161,18 @@ class ChainClient:
         tx_dict = tx.to_dict()
         clean_tx_dict = {k: v for k, v in tx_dict.items() if v is not None}
         return self._retry(self._w3.eth.call, clean_tx_dict, block)
+
+    def get_gas_price_gwei(self) -> int:
+        """
+        Fetches the current gas price from the network and converts it to Gwei.
+        Returns an integer (e.g., 30).
+        """
+        try:
+            wei_price = self._w3.eth.gas_price
+
+            gwei_price = self._w3.from_wei(wei_price, "gwei")
+
+            return int(gwei_price)
+        except Exception as e:
+            print(f"Error fetching gas price: {e}")
+            return 30

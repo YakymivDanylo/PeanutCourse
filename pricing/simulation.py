@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 import time
+import logging
 
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
@@ -10,6 +11,8 @@ from core.types import Address
 from pricing.amm import UniswapV2Pair
 from pricing.routing import Route
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SimulationResult:
@@ -17,7 +20,7 @@ class SimulationResult:
     amount_out: int
     gas_used: int
     error: Optional[str]
-    logs: list  # Decoded events
+    logs: list
 
 
 class ForkSimulator:
@@ -26,15 +29,27 @@ class ForkSimulator:
     """
 
     ROUTER_ADDRESS = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    WETH_ADDRESS = Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+    USDT_ADDRESS = Address("0xdAC17F958D2ee523a2206206994597C13D831ec7")
+    USDC_ADDRESS = Address("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+
+    WHALES = {
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7": Address(
+            "0xF977814e90dA44bFA03b6295A0616a897441aceC"
+        ),
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": Address(
+            "0xF977814e90dA44bFA03b6295A0616a897441aceC"
+        ),
+    }
 
     SWAP_EXACT_TOKENS_FOR_TOKENS = function_signature_to_4byte_selector(
         "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
     )
 
+    ERC20_APPROVE = function_signature_to_4byte_selector("approve(address,uint256)")
+    WETH_DEPOSIT = function_signature_to_4byte_selector("deposit()")
+
     def __init__(self, fork_url: str):
-        """
-        fork_url: Local Anvil/Hardhat fork RPC
-        """
         self.w3 = Web3(Web3.HTTPProvider(fork_url))
         if not self.w3.is_connected():
             raise ConnectionError("RPC connection failed")
@@ -53,21 +68,78 @@ class ForkSimulator:
         wei = int(amount_eth * 10**18)
         self.w3.provider.make_request("anvil_setBalance", [address.checksum, hex(wei)])
 
+    def _approve(self, token: Address, spender: Address, sender: Address):
+        """
+        Force approve token for spender. Handles USDT reset-to-zero quirk.
+        """
+        max_amount = 2**256 - 1
+
+        data_zero = self.ERC20_APPROVE + encode(
+            ["address", "uint256"], [spender.checksum, 0]
+        )
+        tx_zero = {
+            "from": sender.checksum,
+            "to": token.checksum,
+            "data": data_zero,
+            "gas": 60000,
+            "gasPrice": self.w3.eth.gas_price,
+            "value": 0,
+        }
+
+        try:
+            self.w3.eth.send_transaction(tx_zero)
+        except Exception:
+            pass
+
+        data_max = self.ERC20_APPROVE + encode(
+            ["address", "uint256"], [spender.checksum, max_amount]
+        )
+        tx_max = {
+            "from": sender.checksum,
+            "to": token.checksum,
+            "data": data_max,
+            "gas": 100000,
+            "gasPrice": self.w3.eth.gas_price,
+            "value": 0,
+        }
+
+        try:
+            tx_hash = self.w3.eth.send_transaction(tx_max)
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            if receipt.status != 1:
+                logger.warning(f"Approve transaction reverted for {token.checksum}")
+        except Exception as e:
+            logger.error(f"Approve failed: {e}")
+
+    def _wrap_eth(self, amount: int, sender: Address):
+        """Deposit ETH to get WETH."""
+        safe_amount = amount * 10
+        tx: TxParams = {
+            "from": sender.checksum,
+            "to": self.WETH_ADDRESS.checksum,
+            "data": self.WETH_DEPOSIT,
+            "gas": 100000,
+            "gasPrice": self.w3.eth.gas_price,
+            "value": safe_amount,
+        }
+        try:
+            tx_hash = self.w3.eth.send_transaction(tx)
+            self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        except Exception as e:
+            logger.error(f"Wrap ETH failed: {e}")
+
     def simulate_swap(
         self, router: Address, swap_params: dict, sender: Address
     ) -> SimulationResult:
-        """
-        Simulate a swap and return detailed results.
-        """
+        """Simulate a swap and return detailed results."""
         self._impersonate(sender)
-        self._set_balance_ether(sender)
 
         tx: TxParams = {
             "from": sender.checksum,
             "to": router.checksum,
             "data": swap_params.get("data", b""),
             "value": swap_params.get("value", 0),
-            "gas": 500_000,  # Default high gas
+            "gas": 500_000,
             "gasPrice": self.w3.eth.gas_price,
         }
 
@@ -75,20 +147,13 @@ class ForkSimulator:
             gas_estimate = self.w3.eth.estimate_gas(tx)
             tx["gas"] = int(gas_estimate * 1.2)
 
-            # As its local fork than we can send transaction
-            # without signing it if impersonated
             tx_hash = self.w3.eth.send_transaction(tx)
-
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-
             raw_return = self.w3.eth.call(tx)
 
-            # Try decode amounts[] if standard swap
             try:
                 if raw_return.startswith(b"x0"):
                     raw_return = raw_return[2:]
-                # last uint256 in the array is usually amountOut
-
                 amount_out_sim = 0
                 if len(raw_return) >= 32:
                     amount_out_sim = int.from_bytes(raw_return[-32:], byteorder="big")
@@ -116,28 +181,40 @@ class ForkSimulator:
     def simulate_route(
         self, route: Route, amount_in: int, sender: Address
     ) -> SimulationResult:
-        """
-        Simulate a multi-hop route.
-        """
+        """Simulate a multi-hop route."""
         path_addresses = [t.checksum for t in route.path]
         deadline = int(time.time()) + 3600
+        token_in = route.path[0]
 
-        # We set amountOutMin to 0 to ensure it doesn't revert
-        # due to slippage during sim
+        sim_sender = sender
+
+        if token_in.checksum in self.WHALES:
+            sim_sender = self.WHALES[token_in.checksum]
+
+        try:
+            self._impersonate(sim_sender)
+            self._set_balance_ether(sim_sender, 10.0)
+
+            if token_in.checksum == self.WETH_ADDRESS.checksum:
+                self._wrap_eth(amount_in, sim_sender)
+
+            self._approve(token_in, self.ROUTER_ADDRESS, sim_sender)
+
+        except Exception as e:
+            logger.error(f"Simulation setup failed: {e}")
+            self._stop_impersonating(sim_sender)
+            return SimulationResult(False, 0, 0, f"Setup Error: {e}", [])
+
         encoded_args = encode(
             ["uint256", "uint256", "address[]", "address", "uint256"],
-            [amount_in, 0, path_addresses, sender.checksum, deadline],
+            [amount_in, 0, path_addresses, sim_sender.checksum, deadline],
         )
 
         data = self.SWAP_EXACT_TOKENS_FOR_TOKENS + encoded_args
-
-        swap_params = {
-            "data": data,
-            "value": 0,
-        }
+        swap_params = {"data": data, "value": 0}
 
         return self.simulate_swap(
-            router=self.ROUTER_ADDRESS, swap_params=swap_params, sender=sender
+            router=self.ROUTER_ADDRESS, swap_params=swap_params, sender=sim_sender
         )
 
     def compare_simulation_vs_calculation(
@@ -147,10 +224,6 @@ class ForkSimulator:
         token_in: Address,
         sender_override: Optional[Address] = None,
     ) -> dict:
-        """
-        Compare our AMM math vs actual fork simulation.
-        Useful for validation.
-        """
         calculated_out = pair.get_amount_out(amount_in, token_in)
         token_out = pair.token1 if token_in == pair.token0 else pair.token0
         route = Route([pair], [token_in, token_out])

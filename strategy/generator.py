@@ -1,6 +1,9 @@
 import time
 import logging
 from typing import Optional
+
+from web3 import Web3
+
 from strategy.signal import Signal, Direction
 from strategy.fees import FeeStructure
 from core.types import Address
@@ -105,16 +108,21 @@ class SignalGenerator:
             cex_ask = float(ob["asks"][0][0])
 
             base_symbol, quote_symbol = pair.split("/")
-            base_addr = Address(TOKEN_MAP[base_symbol])
-            quote_addr = Address(TOKEN_MAP[quote_symbol])
 
-            base_decimals = DECIMALS[base_symbol]
-            quote_decimals = DECIMALS[quote_symbol]
+            base_addr = Address(Web3.to_checksum_address(self.token_map[base_symbol]))
+            quote_addr = Address(Web3.to_checksum_address(self.token_map[quote_symbol]))
+
+            base_decimals = DECIMALS.get(base_symbol, 18)
+            quote_decimals = DECIMALS.get(quote_symbol, 18)
 
             amount_in_wei = int(size * (10**base_decimals))
+            current_gas_gwei = self.pricing.client.get_gas_price_gwei()
 
             quote_sell = self.pricing.get_quote(
-                token_in=base_addr, token_out=quote_addr, amount_in=amount_in_wei
+                token_in=base_addr,
+                token_out=quote_addr,
+                amount_in=amount_in_wei,
+                gas_price_gwei=current_gas_gwei,
             )
 
             if not quote_sell or quote_sell.expected_output == 0:
@@ -127,7 +135,10 @@ class SignalGenerator:
             amount_in_usdt_wei = int(approx_usdt_in * (10**quote_decimals))
 
             quote_buy = self.pricing.get_quote(
-                token_in=quote_addr, token_out=base_addr, amount_in=amount_in_usdt_wei
+                token_in=quote_addr,
+                token_out=base_addr,
+                amount_in=amount_in_usdt_wei,
+                gas_price_gwei=current_gas_gwei,
             )
 
             if not quote_buy or quote_buy.expected_output == 0:

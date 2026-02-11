@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 import time
+
+from web3 import Web3
+
 from chain.client import ChainClient
 from core.types import Address
 from pricing.amm import UniswapV2Pair
@@ -66,10 +69,22 @@ class PricingEngine:
         for addr in pool_addresses:
             try:
                 pair = UniswapV2Pair.from_chain(addr, self.client)
+
+                pair.token0 = Address(Web3.to_checksum_address(pair.token0))
+                pair.token1 = Address(Web3.to_checksum_address(pair.token1))
+
                 self.pools[addr.checksum] = pair
                 pairs.append(pair)
+
+                logger.info(
+                    f"✅ Pool loaded: {pair.symbol} "
+                    f"| Tokens: {pair.token0.checksum} - {pair.token1.checksum}"
+                )
             except Exception as e:
-                logger.error(f"Failed to load pool {addr.value}: {e}")
+                logger.error(f"❌ Failed to load pool {addr.checksum}: {e}")
+
+        logger.info(f"Initializing router with {len(pairs)} pairs")
+        self.router = RouteFinder(pairs)
 
     def refresh_pool(self, address: Address):
         """Refresh single pool's reserves."""
@@ -87,9 +102,6 @@ class PricingEngine:
     def get_quote(
         self, token_in: Address, token_out: Address, amount_in: int, gas_price_gwei: int
     ) -> Quote:
-        """
-        Get best quote for a swap.
-        """
         if not self.router:
             raise QuoteError("Router not initialized. Call load_pools first")
 
@@ -98,10 +110,11 @@ class PricingEngine:
         )
 
         if not route:
-            raise QuoteError("No route found")
+            raise QuoteError(
+                f"No route found for {token_in.checksum} -> {token_out.checksum}"
+            )
 
         sim_sender = Address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-
         sim_result = self.simulator.simulate_route(route, amount_in, sim_sender)
 
         if not sim_result.success:
@@ -145,17 +158,28 @@ class PricingEngine:
                     diff = expected_out - swap.min_amount_out
                     slippage_pct = (Decimal(diff) / Decimal(expected_out)) * 100
 
+                    WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+
+                    dec_in = 18 if swap.token_in.checksum == WETH else 6
+                    dec_out = 6 if swap.token_in.checksum == WETH else 18
+
+                    human_amount_in = Decimal(swap.amount_in) / (10**dec_in)
+                    human_min_out = Decimal(swap.min_amount_out) / (10**dec_out)
+                    human_expected = Decimal(expected_out) / (10**dec_out)
+
                     log_msg = (
                         f"Detected Swap on {relevant_pair.symbol}:\n"
                         f"  Tx: {swap.tx_hash[:10]}...\n"
-                        f"  Amount: {swap.amount_in} -> Min: {swap.min_amount_out}\n"
-                        f"  Expected (Local): {expected_out}\n"
+                        f"  Amount: {human_amount_in:.4f} -> Min: {human_min_out:.4f}\n"
+                        f"  Expected (Local): {human_expected:.2f}\n"
                         f"  Implied Slippage: {slippage_pct:.2f}%"
                     )
 
                     if slippage_pct > 2.0:
-                        logger.warning(log_msg + "[HIGH SLIPPAGE - ARB OPPORTUNITY]")
+                        logger.warning(log_msg + " [HIGH SLIPPAGE - ARB OPPORTUNITY]")
                     else:
                         logger.info(log_msg)
+            except Exception as e:
+                logger.error(f"Error in swap analysis: {e}")
             except ValueError:
                 pass

@@ -6,7 +6,7 @@ from typing import Callable, Optional, Any
 
 import websockets
 from eth_abi import decode
-from pydantic import json
+import json
 from web3 import Web3, HTTPProvider
 
 from core.types import Address
