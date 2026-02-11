@@ -23,7 +23,10 @@ def setup_components():
         "min_spread_bps": 20,
         "min_profit_usd": 1.0,
         "cooldown_seconds": 1,
-        "token_map": {"ETH": "0xBase", "USDT": "0xQuote"},
+        "token_map": {
+            "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        },
     }
 
     mock_inventory.get_available.return_value = Decimal("100000.0")
