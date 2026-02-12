@@ -28,7 +28,7 @@ class MockReceipt:
 
 
 async def verify_executor():
-    print("Починаємо перевірку Executor...")
+    print("Starting Executor...")
 
     mock_exchange = MagicMock()
     mock_exchange.create_limit_ioc_order.return_value = {

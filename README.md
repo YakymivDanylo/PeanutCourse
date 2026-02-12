@@ -23,9 +23,21 @@ management, robust blockchain interaction, transaction construction, and analysi
     - `analyze_impact.py`: CLI tool to visualize price impact for different trade sizes.
     - `integration_test.py`: End-to-end test on Sepolia network.
     - `start_fork.sh`: Script to launch a local Anvil fork for testing.
+- **`strategy/`**: The strategy layer is responsible for identifying, validating, and prioritizing arbitrage
+  opportunities.
+    - `signal.py`: Automatically detects price discrepancies between CEX and DEX. It determines the optimal trade
+      direction (BUY_CEX_SELL_DEX or BUY_DEX_SELL_CEX) and enforces strict validation rules, including Signal TTL (
+      Time-To-Live) and real-time inventory availability checks.
+    - `fees.py`: Calculates the precise breakeven spread by aggregating CEX taker fees, DEX swap fees, and estimated
+      L1/L2 gas costs. This ensures the system only targets signals with positive net expectancy.
+    - `scorer.py`:Implements a multi-factor scoring algorithm (0-100). The score is derived from weighted metrics:
 - **`exchange/`**: Integration with Centralized Exchanges (Binance).
     - `client.py` for CCXT-based API calls
     - `orderbook.py` for depth analysis.
+- **`executor/`**: The execution layer manages the lifecycle of arbitrage trades across distributed venues.
+    - `engine.py`:Handles complex trade transitions to ensure atomicity. Stages include:
+      VALIDATING ➔ LEG1_PENDING ➔ LEG1_FILLED ➔ LEG2_PENDING ➔ DONE.
+    - `recovery.py`:To protect capital during high volatility or infrastructure instability:
 - **`integration/`**: High-level scripts for cross-platform strategies.
     - `arb_checker.py` handles arbitrage window discovery between DEX and CEX.
 - **`inventory/`**: Asset and profit monitoring.
@@ -297,6 +309,7 @@ performance reporting.
   for further analysis.
 
 ### System Architecture
+
 ```mermaid
 graph TD
     classDef external fill:#ffcccc,stroke:#b30000,stroke-width:2px,color:black;
@@ -350,3 +363,39 @@ graph TD
   filled positions during arbitrage cycles.
 * **Extensible Architecture**: Modular design allowing for easy integration of additional exchanges or AMM types without
   modifying core strategy logic.
+
+## Week 4: Strategy & Execution
+
+This update introduces the "Brain and Muscles" of the arbitrage system, focusing on intelligent opportunity detection
+and robust multi-venue execution.
+
+### Submission Commands
+
+## Submission Commands
+
+* **Verify Execution Logic:**  
+  Run the standalone verification script to test state transitions and safety guards:
+    ```
+    python scripts/verify_executor.py
+    ```
+* **Make Price Anomalies**  
+    Simulate market movements to trigger the bot. In a separate terminal (with the fork running), manipulate the DEX price:
+    ```
+    # To simulate a DEX price drop
+    python scripts/manipulate_price.py dump --amount 5000
+
+    # To simulate a DEX price pump
+    python scripts/manipulate_price.py pump --amount 5000
+  ```
+* **Run bot and check for its out put**
+    ```
+  python scripts/arb_bot.py
+  ```
+
+## Key Features & Design Decisions
+
+* **Intelligent Scoring**: Multi-factor scoring engine that prioritizes opportunities based on spread, liquidity depth, and inventory balance.
+* **Execution State Machine**: Manages the complex lifecycle of arbitrage trades across distributed venues to ensure consistency and atomicity.
+* **Adaptive Safety (Circuit Breaker)**: Automated system protection that halts the bot after 3 consecutive failures within a 5-minute window.
+* **Discord Notifications**: Instant alerting system via Webhooks to notify about Circuit Breaker trips, critical errors, or successful high-PnL trades.
+* **Flashbots Integration**: Specialized DEX-first execution path to minimize gas costs and mitigate the risk of failed on-chain transactions.
