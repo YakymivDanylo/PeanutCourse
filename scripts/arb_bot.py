@@ -2,8 +2,8 @@ import asyncio
 import logging
 import os
 import sys
+from decimal import Decimal
 from dotenv import load_dotenv
-
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,6 +13,7 @@ from inventory.tracker import InventoryTracker, Venue  # noqa: E402
 from strategy.fees import FeeStructure  # noqa: E402
 from strategy.generator import SignalGenerator  # noqa: E402
 from strategy.scorer import SignalScorer  # noqa: E402
+from strategy.signal import Direction  # noqa: E402
 from executor.engine import Executor, ExecutorConfig, ExecutorState  # noqa: E402
 from pricing.engine import PricingEngine  # noqa: E402
 from chain.client import ChainClient  # noqa: E402
@@ -37,11 +38,17 @@ class ArbBot:
         self.trade_size = float(config.get("trade_size", 0.1))
         self.running = False
 
+        self.paper_trading = config.get("paper_trading", False)
+        if self.paper_trading:
+            logger.info("PAPER TRADING MODE ENABLED")
+            self.config["simulation"] = True
+            self.initial_capital_usd = Decimal("0")
+
         api_config = BINANCE_CONFIG.copy()
         api_config.update(
             {
-                "apiKey": config["binance_key"],
-                "secret": config["binance_secret"],
+                "apiKey": config.get("binance_key", ""),
+                "secret": config.get("binance_secret", ""),
             }
         )
 
@@ -54,6 +61,9 @@ class ArbBot:
         self.pricing_engine = PricingEngine(self.chain_client, rpc_url, ws_url)
 
         self.inventory = InventoryTracker()
+
+        if self.paper_trading:
+            self._init_paper_balances()
 
         self.fees = FeeStructure()
 
@@ -71,8 +81,29 @@ class ArbBot:
             exchange_client=self.exchange,
             pricing_module=self.pricing_engine,
             inventory_tracker=self.inventory,
+            wallet_manager=None,
             config=ExecutorConfig(simulation_mode=config.get("simulation", True)),
         )
+
+        if self.paper_trading:
+            initial_snapshot = self.inventory.snapshot(
+                prices={"ETH": Decimal("2000"), "USDT": Decimal("1")}
+            )
+            self.initial_capital_usd = initial_snapshot["total_usd"]
+
+    def _init_paper_balances(self):
+        """Sets up fake balances for testing."""
+        logger.info("Initializing Paper Balances: 10 ETH, 20,000 USDT per venue")
+
+        binance_eth = self.inventory._get_balance(Venue.BINANCE, "ETH")
+        binance_eth.free = Decimal("10.0")
+        binance_usdt = self.inventory._get_balance(Venue.BINANCE, "USDT")
+        binance_usdt.free = Decimal("20000.0")
+
+        wallet_eth = self.inventory._get_balance(Venue.WALLET, "ETH")
+        wallet_eth.free = Decimal("10.0")
+        wallet_usdt = self.inventory._get_balance(Venue.WALLET, "USDT")
+        wallet_usdt.free = Decimal("20000.0")
 
     async def run(self):
         self.running = True
@@ -122,7 +153,6 @@ class ArbBot:
             )
 
             if signal.score < 60:
-                logging.info("Skipped: score below threshold")
                 continue
 
             logging.info(f"Executing: {signal.direction.name} {self.trade_size} ETH")
@@ -134,6 +164,11 @@ class ArbBot:
             if ctx.state == ExecutorState.DONE:
                 pnl = ctx.actual_net_pnl if ctx.actual_net_pnl else 0.0
                 logging.info(f"SUCCESS: PnL=${pnl:.2f}")
+
+                if self.paper_trading:
+                    self._update_paper_balances_after_trade(ctx)
+                    self._log_paper_status(signal)
+
             else:
                 logging.warning(f"FAILED: {ctx.error}")
 
@@ -143,9 +178,88 @@ class ArbBot:
                 )
                 logging.warning(f"Circuit breaker: {failures}/{threshold} failures")
 
-            await self._sync_balances()
+            if not self.paper_trading:
+                await self._sync_balances()
+
+    def _update_paper_balances_after_trade(self, ctx):
+        """Manually updates InventoryTracker based
+        on execution context with correct side logic."""
+        signal = ctx.signal
+        base, quote = signal.pair.split("/")
+
+        def get_venue_enum(v_str):
+            return Venue.BINANCE if v_str == "cex" else Venue.WALLET
+
+        if signal.direction == Direction.BUY_CEX_SELL_DEX:
+            cex_action = "buy"
+            dex_action = "sell"
+        else:
+            cex_action = "sell"
+            dex_action = "buy"
+
+        if ctx.leg1_venue == "cex":
+            leg1_side = cex_action
+            leg2_side = dex_action
+        else:
+            leg1_side = dex_action
+            leg2_side = cex_action
+
+        leg1_venue_enum = get_venue_enum(ctx.leg1_venue)
+        leg1_price = Decimal(str(ctx.leg1_fill_price))
+        leg1_size = Decimal(str(ctx.leg1_fill_size))
+        leg1_quote_qty = leg1_size * leg1_price
+        leg1_fee = leg1_quote_qty * Decimal("0.001")
+
+        self.inventory.record_trade(
+            venue=leg1_venue_enum,
+            side=leg1_side,
+            base_asset=base,
+            quote_asset=quote,
+            base_amount=leg1_size,
+            quote_amount=leg1_quote_qty,
+            fee=leg1_fee,
+            fee_asset=quote,
+        )
+
+        leg2_venue_enum = get_venue_enum(ctx.leg2_venue)
+        leg2_price = Decimal(str(ctx.leg2_fill_price))
+        leg2_size = Decimal(str(ctx.leg2_fill_size))
+        leg2_quote_qty = leg2_size * leg2_price
+        leg2_fee = leg2_quote_qty * Decimal("0.001")
+
+        self.inventory.record_trade(
+            venue=leg2_venue_enum,
+            side=leg2_side,
+            base_asset=base,
+            quote_asset=quote,
+            base_amount=leg2_size,
+            quote_amount=leg2_quote_qty,
+            fee=leg2_fee,
+            fee_asset=quote,
+        )
+
+    def _log_paper_status(self, signal):
+        """Logs current portfolio value and total PnL."""
+        prices = {
+            "ETH": Decimal(str(signal.cex_price)),
+            "USDT": Decimal("1.0"),
+            "USDC": Decimal("1.0"),
+        }
+        snapshot = self.inventory.snapshot(prices)
+        current_usd = snapshot["total_usd"]
+        total_pnl = current_usd - self.initial_capital_usd
+
+        logger.info("-" * 40)
+        logger.info("PAPER TRADING REPORT")
+        logger.info(f"Total Value: ${current_usd:,.2f}")
+        logger.info(f"Total PnL:   ${total_pnl:,.2f}")
+        logger.info(f"Holdings:    {snapshot['totals']}")
+        logger.info("-" * 40)
 
     async def _sync_balances(self):
+        if self.paper_trading:
+            return
+
         try:
             balances = self.exchange.fetch_balance()
 
@@ -160,13 +274,14 @@ class ArbBot:
 
 if __name__ == "__main__":
     config = {
-        "binance_key": os.getenv("BINANCE_TESTNET_API_KEY"),
-        "binance_secret": os.getenv("BINANCE_TESTNET_SECRET"),
+        "binance_key": os.getenv("BINANCE_TESTNET_API_KEY", ""),
+        "binance_secret": os.getenv("BINANCE_TESTNET_SECRET", ""),
         "rpc_url": "http://127.0.0.1:8545",
         "ws_url": "ws://127.0.0.1:8545",
         "pairs": ["ETH/USDT"],
         "trade_size": 0.1,
         "simulation": True,
+        "paper_trading": True,
         "signal_config": {"min_spread_bps": 5},
     }
 

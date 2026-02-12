@@ -13,14 +13,14 @@ load_dotenv()
 
 @pytest.fixture
 def mock_deps():
-    return MagicMock(), MagicMock(), MagicMock()
+    return MagicMock(), MagicMock(), MagicMock(), MagicMock()
 
 
 @pytest.fixture
 def executor(mock_deps):
-    exchange, pricing, inventory = mock_deps
-    config = ExecutorConfig(simulation_mode=True, use_flashbots=False)  # CEX first
-    return Executor(exchange, pricing, inventory, config)
+    exchange, pricing, inventory, wallet = mock_deps
+    config = ExecutorConfig(simulation_mode=False, use_flashbots=False)
+    return Executor(exchange, pricing, inventory, wallet, config)
 
 
 @pytest.fixture
@@ -45,6 +45,13 @@ def signal():
 @pytest.mark.asyncio
 async def test_execute_success(executor, signal):
     """Both legs fill, state ends at DONE."""
+    executor._execute_cex_leg = AsyncMock(
+        return_value={"success": True, "price": 2000.0, "filled": 1.0}
+    )
+    executor._execute_dex_leg = AsyncMock(
+        return_value={"success": True, "price": 2020.0, "filled": 1.0}
+    )
+
     ctx = await executor.execute(signal)
 
     assert ctx.state == ExecutorState.DONE
@@ -58,8 +65,7 @@ async def test_execute_cex_timeout(executor, signal):
     """CEX timeout results in FAILED state."""
     executor.config.leg1_timeout = 0.01
 
-    # Mock _execute_cex_leg to hang
-    async def slow_leg(*args):
+    async def slow_leg(*args, **kwargs):
         await asyncio.sleep(0.1)
         return {}
 
@@ -73,13 +79,16 @@ async def test_execute_cex_timeout(executor, signal):
 @pytest.mark.asyncio
 async def test_execute_dex_failure_unwinds(executor, signal):
     """DEX failure after CEX fill triggers unwind."""
-    # CEX succeeds (simulation mode default), DEX fails
+    executor._execute_cex_leg = AsyncMock(
+        return_value={"success": True, "price": 2000.0, "filled": 1.0}
+    )
     executor._execute_dex_leg = AsyncMock(return_value={"success": False})
+    executor._unwind = AsyncMock()
 
     ctx = await executor.execute(signal)
 
     assert ctx.state == ExecutorState.FAILED
-    assert "unwound" in ctx.error
+    assert "DEX failed - unwound" in ctx.error
 
 
 @pytest.mark.asyncio
@@ -108,10 +117,15 @@ async def test_circuit_breaker_blocks(executor, signal):
 @pytest.mark.asyncio
 async def test_replay_protection(executor, signal):
     """Same signal can't execute twice."""
-    # First run
+    executor._execute_cex_leg = AsyncMock(
+        return_value={"success": True, "price": 2000.0, "filled": 1.0}
+    )
+    executor._execute_dex_leg = AsyncMock(
+        return_value={"success": True, "price": 2020.0, "filled": 1.0}
+    )
+
     await executor.execute(signal)
 
-    # Second run
     ctx = await executor.execute(signal)
     assert ctx.state == ExecutorState.FAILED
     assert ctx.error == "Duplicate signal"
