@@ -4,11 +4,36 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 
+from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
+
 from exchange.client import ExchangeClient
 from inventory.tracker import InventoryTracker
 from pricing.engine import PricingEngine
 from strategy.signal import Signal, Direction
 from executor.recovery import CircuitBreaker, ReplayProtection
+from chain.builder import TransactionBuilder
+from core.wallet import WalletManager
+from core.types import Address, TokenAmount
+
+ROUTER_ADDRESS = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+SWAP_EXACT_TOKENS_FOR_TOKENS = function_signature_to_4byte_selector(
+    "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
+)
+SWAP_EXACT_ETH_FOR_TOKENS = function_signature_to_4byte_selector(
+    "swapExactETHForTokens(uint256,address[],address,uint256)"
+)
+SWAP_EXACT_TOKENS_FOR_ETH = function_signature_to_4byte_selector(
+    "swapExactTokensForETH(uint256,uint256,address[],address,uint256)"
+)
+
+TOKEN_MAP = {
+    "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH
+    "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+}
+DECIMALS = {"ETH": 18, "WETH": 18, "USDT": 6, "USDC": 6}
 
 
 class ExecutorState(Enum):
@@ -60,11 +85,13 @@ class Executor:
         exchange_client: ExchangeClient,
         pricing_module: PricingEngine,
         inventory_tracker: InventoryTracker,
+        wallet_manager: WalletManager,
         config: Optional[ExecutorConfig] = None,
     ):
         self.exchange = exchange_client
         self.pricing = pricing_module
         self.inventory = inventory_tracker
+        self.wallet = wallet_manager
         self.config = config or ExecutorConfig()
 
         self.circuit_breaker = CircuitBreaker()
@@ -226,14 +253,12 @@ class Executor:
         actual_size = size or signal.size
         if self.config.simulation_mode:
             await asyncio.sleep(0.1)
-            # Simulating fill at slightly worse price than signal
             return {
                 "success": True,
                 "price": signal.cex_price * 1.0001,
                 "filled": actual_size,
             }
 
-        # Real execution via exchange client
         side = "buy" if signal.direction == Direction.BUY_CEX_SELL_DEX else "sell"
         try:
             result = self.exchange.create_limit_ioc_order(
@@ -242,7 +267,6 @@ class Executor:
                 amount=actual_size,
                 price=signal.cex_price * 1.001,  # Slightly aggressive limit for IOC
             )
-            # Normalize result check based on ExchangeClient response structure
             is_filled = result["status"] == "filled" or (
                 result["status"] == "closed" and result["amount_filled"] > 0
             )
@@ -259,14 +283,136 @@ class Executor:
         if self.config.simulation_mode:
             await asyncio.sleep(0.5)
             return {"success": True, "price": signal.dex_price * 0.9998, "filled": size}
-        raise NotImplementedError("Real DEX execution requires Week 2 integration")
+
+        base_sym, quote_sym = signal.pair.split("/")
+
+        if signal.direction == Direction.BUY_CEX_SELL_DEX:
+            token_in_sym = base_sym
+            token_out_sym = quote_sym
+            amount_in_human = size
+        else:
+            token_in_sym = quote_sym
+            token_out_sym = base_sym
+            amount_in_human = size * signal.dex_price
+
+        decimals_in = DECIMALS.get(token_in_sym, 18)
+        amount_in_raw = int(amount_in_human * (10**decimals_in))
+
+        token_in_addr = Address(TOKEN_MAP[token_in_sym])
+        token_out_addr = Address(TOKEN_MAP[token_out_sym])
+
+        try:
+            gas_price_gwei = self.pricing.client.get_gas_price_gwei()
+            quote = self.pricing.get_quote(
+                token_in_addr, token_out_addr, amount_in_raw, gas_price_gwei
+            )
+
+            min_amount_out = int(quote.expected_output * 0.99)
+            deadline = int(time.time()) + 120
+            path = [t.checksum for t in quote.route.path]
+            to = self.wallet.address
+
+            is_native_in = token_in_sym == "ETH"
+            is_native_out = token_out_sym == "ETH"
+
+            data = b""
+            value_raw = TokenAmount(0, 18)
+
+            if is_native_in:
+                # swapExactETHForTokens
+                args = encode(
+                    ["uint256", "address[]", "address", "uint256"],
+                    [min_amount_out, path, to, deadline],
+                )
+                data = SWAP_EXACT_ETH_FOR_TOKENS + args
+                value_raw = TokenAmount(amount_in_raw, 18)
+
+            elif is_native_out:
+                # swapExactTokensForETH
+                args = encode(
+                    ["uint256", "uint256", "address[]", "address", "uint256"],
+                    [amount_in_raw, min_amount_out, path, to, deadline],
+                )
+                data = SWAP_EXACT_TOKENS_FOR_ETH + args
+            else:
+                # swapExactTokensForTokens
+                args = encode(
+                    ["uint256", "uint256", "address[]", "address", "uint256"],
+                    [amount_in_raw, min_amount_out, path, to, deadline],
+                )
+                data = SWAP_EXACT_TOKENS_FOR_TOKENS + args
+
+            builder = TransactionBuilder(self.pricing.client, self.wallet)
+            builder.to(ROUTER_ADDRESS)
+            builder.value(value_raw)
+            builder.data(data)
+            builder.with_gas_estimate()
+            builder.with_gas_price()
+
+            receipt = builder.send_and_wait(timeout=60)
+
+            if receipt.status:
+                amount_out_human = float(quote.expected_output) / (
+                    10 ** DECIMALS[token_out_sym]
+                )
+                fill_price = amount_out_human / size if size else 0
+                return {
+                    "success": True,
+                    "price": fill_price,
+                    "filled": size,
+                    "tx_hash": receipt.tx_hash,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "TX Reverted",
+                    "tx_hash": receipt.tx_hash,
+                }
+
+        except Exception as e:
+            return {"success": False, "error": f"DEX Execution failed: {e}"}
 
     async def _unwind(self, ctx: ExecutionContext):
         """Market sell to flatten stuck position."""
         if self.config.simulation_mode:
             await asyncio.sleep(0.1)
             return
-        raise NotImplementedError("Real unwind not implemented")
+
+        if ctx.leg1_venue == "cex":
+            side = (
+                "sell" if ctx.signal.direction == Direction.BUY_CEX_SELL_DEX else "buy"
+            )
+            try:
+                self.exchange.create_market_order(
+                    symbol=ctx.signal.pair, side=side, amount=ctx.leg1_fill_size
+                )
+            except Exception as e:
+                print(f"CRITICAL: CEX Unwind failed: {e}")
+
+        elif ctx.leg1_venue == "dex":
+            reverse_dir = (
+                Direction.BUY_CEX_SELL_DEX
+                if ctx.signal.direction == Direction.BUY_DEX_SELL_CEX
+                else Direction.BUY_DEX_SELL_CEX
+            )
+
+            unwind_signal = Signal.create(
+                pair=ctx.signal.pair,
+                direction=reverse_dir,
+                cex_price=0,
+                dex_price=0,
+                spread_bps=0,
+                size=ctx.leg1_fill_size,
+                expected_gross_pnl=0,
+                expected_fees=0,
+                expected_net_pnl=0,
+                score=0,
+                expiry=0,
+                inventory_ok=True,
+                within_limits=True,
+            )
+
+            await self._execute_dex_leg(unwind_signal, ctx.leg1_fill_size)
 
     def _calculate_pnl(self, ctx: ExecutionContext) -> float:
         signal = ctx.signal
