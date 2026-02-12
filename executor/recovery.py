@@ -1,8 +1,10 @@
 import time
+from datetime import datetime
 import logging
 from dataclasses import dataclass
 from typing import Optional
 from strategy.signal import Signal
+import requests
 
 
 @dataclass
@@ -10,6 +12,7 @@ class CircuitBreakerConfig:
     failure_threshold: int = 3
     window_seconds: float = 300
     cooldown_seconds: float = 600
+    webhook_url: Optional[str] = None
 
 
 class CircuitBreaker:
@@ -28,12 +31,38 @@ class CircuitBreaker:
             self.trip()
 
     def record_success(self):
-        # Optional: Reset failures on success or gradual decay
         pass
 
     def trip(self):
         self.tripped_at = time.time()
-        logging.critical(f"CIRCUIT BREAKER TRIPPED at {self.tripped_at}")
+
+        discord_ts = int(self.tripped_at)
+
+        discord_time_str = f"<t:{discord_ts}:F>"
+
+        readable_time = datetime.fromtimestamp(self.tripped_at).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        msg = (
+            f"CIRCUIT BREAKER TRIPPED AT {readable_time}."
+            f" Failures: {len(self.failures)}"
+        )
+        logging.critical(msg)
+
+        if self.config.webhook_url:
+            try:
+                payload = {
+                    "content": (
+                        f"**ARBITRAGE BOT ALERT**\n"
+                        f"**Status:** Circuit Breaker has tripped\n"
+                        f"**Time:** {discord_time_str}\n"
+                        f"**Number of failures:** `{len(self.failures)}`"
+                    )
+                }
+                requests.post(self.config.webhook_url, json=payload, timeout=5)
+            except Exception as e:
+                logging.error(f"Failed to send webhook alert: {e}")
 
     def is_open(self) -> bool:
         if self.tripped_at is None:

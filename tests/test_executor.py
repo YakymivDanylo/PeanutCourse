@@ -4,6 +4,11 @@ from unittest.mock import MagicMock, AsyncMock
 from executor.engine import Executor, ExecutorConfig, ExecutorState
 from strategy.signal import Signal, Direction
 import time
+import os
+from dotenv import load_dotenv
+from executor.recovery import CircuitBreaker, CircuitBreakerConfig
+
+load_dotenv()
 
 
 @pytest.fixture
@@ -110,3 +115,32 @@ async def test_replay_protection(executor, signal):
     ctx = await executor.execute(signal)
     assert ctx.state == ExecutorState.FAILED
     assert ctx.error == "Duplicate signal"
+
+
+def test_real_webhook_notification():
+    """This test checks sending a real message through the webhook"""
+
+    webhook_url = os.getenv("WEBHOOK_URL")
+
+    if not webhook_url:
+        pytest.skip("Webhook URL not set")
+
+    config = CircuitBreakerConfig(
+        failure_threshold=3,
+        window_seconds=300,
+        cooldown_seconds=600,
+        webhook_url=webhook_url,
+    )
+
+    cb = CircuitBreaker(config=config)
+
+    print(f"\n Sending real request on: {webhook_url}")
+
+    try:
+        cb.trip()
+        print("Method trip() was executed successfully. Check your Discrod/Slack")
+    except Exception as e:
+        pytest.fail(f"Method trip() was not executed successfully: {e}")
+
+    assert cb.is_open() is True
+    assert cb.tripped_at is not None
