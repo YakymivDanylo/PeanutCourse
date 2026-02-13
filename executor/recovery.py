@@ -1,5 +1,4 @@
 import time
-from datetime import datetime
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -21,43 +20,32 @@ class CircuitBreaker:
         self.failures: list[float] = []
         self.tripped_at: Optional[float] = None
 
-    def record_failure(self):
+    def record_failure(self, error_reason: str = "Unknown error"):
         now = time.time()
         self.failures.append(now)
         cutoff = now - self.config.window_seconds
         self.failures = [t for t in self.failures if t > cutoff]
 
         if len(self.failures) >= self.config.failure_threshold:
-            self.trip()
+            self.trip(error_reason)
 
     def record_success(self):
         pass
 
-    def trip(self):
+    def trip(self, error_msg: str = "No details provided"):
         self.tripped_at = time.time()
-
         discord_ts = int(self.tripped_at)
-
         discord_time_str = f"<t:{discord_ts}:F>"
-
-        readable_time = datetime.fromtimestamp(self.tripped_at).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        msg = (
-            f"CIRCUIT BREAKER TRIPPED AT {readable_time}."
-            f" Failures: {len(self.failures)}"
-        )
-        logging.critical(msg)
 
         if self.config.webhook_url:
             try:
                 payload = {
                     "content": (
                         f"**ARBITRAGE BOT ALERT**\n"
-                        f"**Status:** Circuit Breaker has tripped\n"
+                        f"**Status:**Circuit Breaker Tripped\n"
+                        f"**Reason:** `{error_msg}`\n"
                         f"**Time:** {discord_time_str}\n"
-                        f"**Number of failures:** `{len(self.failures)}`"
+                        f"**Failures in window:** `{len(self.failures)}`"
                     )
                 }
                 requests.post(self.config.webhook_url, json=payload, timeout=5)

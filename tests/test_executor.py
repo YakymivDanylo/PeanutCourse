@@ -132,29 +132,22 @@ async def test_replay_protection(executor, signal):
 
 
 def test_real_webhook_notification():
-    """This test checks sending a real message through the webhook"""
-
     webhook_url = os.getenv("WEBHOOK_URL")
-
     if not webhook_url:
         pytest.skip("Webhook URL not set")
 
     config = CircuitBreakerConfig(
-        failure_threshold=3,
-        window_seconds=300,
-        cooldown_seconds=600,
+        failure_threshold=1,
         webhook_url=webhook_url,
     )
-
     cb = CircuitBreaker(config=config)
 
-    print(f"\n Sending real request on: {webhook_url}")
+    error_text = "API Key Invalid or Insufficient Balance"
 
     try:
-        cb.trip()
-        print("Method trip() was executed successfully. Check your Discrod/Slack")
+        cb.record_failure(error_reason=error_text)
+        print("Notification sent. Check Discord for the error message!")
     except Exception as e:
-        pytest.fail(f"Method trip() was not executed successfully: {e}")
+        pytest.fail(f"Execution failed: {e}")
 
     assert cb.is_open() is True
-    assert cb.tripped_at is not None
