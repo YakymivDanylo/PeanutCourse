@@ -255,3 +255,23 @@ class InventoryTracker:
             "max_deviation_pct": max_dev,
             "needs_rebalance": max_dev > 30.0,
         }
+
+    def get_skews(self) -> list[dict]:
+        """
+        Collects skew data for all assets in the inventory.
+        """
+        all_assets = set()
+        for venue_bal in self._balances.values():
+            all_assets.update(venue_bal.keys())
+
+        results = []
+        for asset in all_assets:
+            # Використовуємо існуючий метод skew() для кожного активу
+            asset_skew = self.skew(asset)
+
+            # Додаємо статус для Scorer (якщо відхилення велике — статус RED)
+            asset_skew["status"] = "RED" if asset_skew["needs_rebalance"] else "GREEN"
+            asset_skew["token"] = asset
+            results.append(asset_skew)
+
+        return results
