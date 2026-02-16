@@ -151,3 +151,54 @@ def test_real_webhook_notification():
         pytest.fail(f"Execution failed: {e}")
 
     assert cb.is_open() is True
+
+
+@pytest.mark.asyncio
+async def test_execute_dex_first_flashbots(mock_deps, signal):
+    """
+    Checks that when use_flashbots=True:
+    1. First the DEX leg is executed.
+    2. Then the CEX leg is executed.
+    3. State becomes DONE.
+    """
+    exchange, pricing, inventory, wallet = mock_deps
+
+    config = ExecutorConfig(simulation_mode=False, use_flashbots=True)
+    executor = Executor(exchange, pricing, inventory, wallet, config)
+
+    executor._execute_dex_leg = AsyncMock(
+        return_value={"success": True, "price": 2020.0, "filled": 1.0}
+    )
+    executor._execute_cex_leg = AsyncMock(
+        return_value={"success": True, "price": 2000.0, "filled": 1.0}
+    )
+
+    ctx = await executor.execute(signal)
+
+    assert ctx.state == ExecutorState.DONE
+    assert ctx.leg1_venue == "dex"
+    assert ctx.leg2_venue == "cex"
+
+    executor._execute_dex_leg.assert_awaited_once()
+    executor._execute_cex_leg.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_dex_first_fails_safe(mock_deps, signal):
+    """
+    With use_flashbots=True, if DEX drops, we don't make a CEX trade,
+    and the status is FAILED (but not UNWINDING, because we didn't buy anything).
+    """
+    exchange, pricing, inventory, wallet = mock_deps
+    config = ExecutorConfig(simulation_mode=False, use_flashbots=True)
+    executor = Executor(exchange, pricing, inventory, wallet, config)
+
+    executor._execute_dex_leg = AsyncMock(return_value={"success": False})
+    executor._execute_cex_leg = AsyncMock()
+
+    ctx = await executor.execute(signal)
+
+    assert ctx.state == ExecutorState.FAILED
+    assert ctx.leg1_venue == "dex"
+    executor._execute_cex_leg.assert_not_awaited()
+    assert "DEX failed" in ctx.error
