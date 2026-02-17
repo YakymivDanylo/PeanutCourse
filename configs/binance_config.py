@@ -17,8 +17,8 @@ load_dotenv()
 
 if IS_PROD:
     BINANCE_CONFIG = {
-        "apiKey": os.getenv("BINANCE_API_KEY"),
-        "secret": os.getenv("BINANCE_SECRET"),
+        "apiKey": os.getenv("BINANCE_API_KEY_PROD"),
+        "secret": os.getenv("BINANCE_SECRET_KEY_PROD"),
         "sandbox": False,
         "options": {
             "defaultType": "spot",
