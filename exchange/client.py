@@ -3,6 +3,8 @@ import logging
 import ccxt
 from decimal import Decimal
 import time
+from config import Config
+import math
 
 logger = logging.Logger(__name__)
 
@@ -135,6 +137,28 @@ class ExchangeClient:
             "status": order["status"],
             "timestamp": order["timestamp"],
         }
+
+    def round_quantity(self, qty: float, step: float) -> float:
+        """Rounding the quantity down to the nearest lot step."""
+        if step <= 0:
+            return qty
+        return math.floor(qty / step) * step
+
+    def round_price(self, price: float, tick: float) -> float:
+        """Rounding the price to the nearest price step."""
+        if tick <= 0:
+            return price
+        return round(price / tick) * tick
+
+    def _get_market_filters(self, symbol: str) -> tuple[float, float]:
+        """Dynamically retrieve step and tick from loaded ccxt markets."""
+        try:
+            market = self.exchange.market(symbol)
+            step = float(market["precision"]["amount"])
+            tick = float(market["precision"]["price"])
+            return step, tick
+        except Exception:
+            return Config.ETH_LOT_SIZE_STEP, Config.ETH_PRICE_TICK
 
     def create_limit_ioc_order(
         self,

@@ -3,10 +3,10 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
-
+import logging
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
-
+from config import Config
 from exchange.client import ExchangeClient
 from inventory.tracker import InventoryTracker
 from pricing.engine import PricingEngine
@@ -15,6 +15,8 @@ from executor.recovery import CircuitBreaker, ReplayProtection
 from chain.builder import TransactionBuilder
 from core.wallet import WalletManager
 from core.types import Address, TokenAmount
+
+logger = logging.getLogger(__name__)
 
 ROUTER_ADDRESS = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
 SWAP_EXACT_TOKENS_FOR_TOKENS = function_signature_to_4byte_selector(
@@ -99,6 +101,16 @@ class Executor:
 
     async def execute(self, signal: Signal) -> ExecutionContext:
         ctx = ExecutionContext(signal=signal)
+
+        notional_value = signal.size * signal.cex_price
+        if notional_value < Config.MIN_NOTIONAL:
+            ctx.state = ExecutorState.FAILED
+            ctx.error = (
+                f"Trade value ${notional_value:.2f}"
+                f" below minimum notional ${Config.MIN_NOTIONAL}"
+            )
+            logger.warning(f"EXECUTION REJECTED: {ctx.error}")
+            return ctx
 
         # Pre-flight checks
         if self.circuit_breaker.is_open():

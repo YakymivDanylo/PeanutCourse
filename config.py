@@ -29,6 +29,10 @@ class Config:
         DEX_FEE_BPS = 30.0
         GAS_COST_USD = 0.10
 
+        MIN_NOTIONAL = 5.0
+        ETH_LOT_SIZE_STEP = 0.0001
+        ETH_PRICE_TICK = 0.01
+
     else:
         CHAIN_ID = 31337
         RPC_URL = os.getenv("RPC_URL", "http://127.0.0.1:8545")
