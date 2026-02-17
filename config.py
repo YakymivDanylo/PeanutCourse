@@ -20,7 +20,7 @@ class Config:
         WETH = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
         USDC = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
         ROUTER = "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24"
-        POOL_ADDRESS = ""
+        POOL_ADDRESS = "0x905dfCD5649217c42684f23958568e533C711Aa3"
 
         BINANCE_BASE_URL = "https://api.binance.com"
         BINANCE_WS_URL = "wss://stream.binance.com:9443/ws"
@@ -50,3 +50,7 @@ class Config:
         CEX_FEE_BPS = 0.0
         DEX_FEE_BPS = 30.0
         GAS_COST_USD = 0.0
+
+        MIN_NOTIONAL = 5.0
+        ETH_LOT_SIZE_STEP = 0.0001
+        ETH_PRICE_TICK = 0.01

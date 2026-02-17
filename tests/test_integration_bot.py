@@ -21,6 +21,7 @@ async def test_arb_bot_single_tick_integration():
         "trade_size": 0.1,
         "simulation": True,
         "paper_trading": True,
+        "dry_run": False,
         "signal_config": {"min_spread_bps": 10},
     }
 
@@ -35,7 +36,7 @@ async def test_arb_bot_single_tick_integration():
             cex_price=2000.0,
             dex_price=2050.0,
             spread_bps=250.0,
-            size=0.1,
+            size=0.001,
             expected_gross_pnl=5.0,
             expected_fees=1.0,
             expected_net_pnl=4.0,

@@ -33,6 +33,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s |%(levelname)s |%(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    force=True,
     handlers=[
         logging.FileHandler(f"logs/bot_{datetime.now():%Y%m%d}.log"),
         logging.StreamHandler(),
@@ -121,9 +122,9 @@ class ArbBot:
         logger.info("Initializing MOCK balances for DRY RUN...")
 
         mock_balances = {
-            "ETH": {"free": 10.0, "total": 10.0},
-            "USDC": {"free": 20000.0, "total": 20000.0},
-            "USDT": {"free": 20000.0, "total": 20000.0},
+            "ETH": {"free": Decimal("10.0"), "total": Decimal("10.0")},
+            "USDC": {"free": Decimal("20000.0"), "total": Decimal("20000.0")},
+            "USDT": {"free": Decimal("20000.0"), "total": Decimal("20000.0")},
         }
 
         try:
