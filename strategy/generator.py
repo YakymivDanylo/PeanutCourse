@@ -10,9 +10,9 @@ from core.types import Address
 from pricing.engine import PricingEngine
 
 TOKEN_MAP = {
-    "ETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-    "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "ETH": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+    "USDT": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+    "USDC": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
 }
 DECIMALS = {"ETH": 18, "WETH": 18, "USDT": 6, "USDC": 6}
 
@@ -32,7 +32,7 @@ class SignalGenerator:
         self.fees = fee_structure
 
         self.min_spread_bps = config.get("min_spread_bps", 50)
-        self.min_profit_usd = config.get("min_profit_usd", 5.0)
+        self.min_profit_usd = config.get("min_profit_usd", 0.1)
         self.max_position_usd = config.get("max_position_usd", 10_000)
         self.signal_ttl = config.get("signal_ttl_seconds", 5)
         self.cooldown = config.get("cooldown_seconds", 2)

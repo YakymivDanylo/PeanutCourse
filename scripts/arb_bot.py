@@ -288,7 +288,7 @@ class ArbBot:
 if __name__ == "__main__":
     bot_config = {
         "rpc_url": Config.RPC_URL,
-        "pairs": ["ETH/USDC"] if Config.PRODUCTION else ["ETH/USDT"],
+        "pairs": ["ETH/USDC"] if Config.PRODUCTION else ["ETH/USDC"],
         "trade_size": 0.001 if Config.PRODUCTION else 0.1,
         "dry_run": Config.DRY_RUN,
         "signal_config": {"min_spread_bps": 5},

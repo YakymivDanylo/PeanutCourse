@@ -40,9 +40,9 @@ class Config:
         CHAIN_WS_URL = os.getenv("WS_URL", "ws://127.0.0.1:8545")
 
         WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        USDC = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
         ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
-        POOL_ADDRESS = "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852"
+        POOL_ADDRESS = "0x905dfCD5649217c42684f23958568e533C711Aa3"
 
         BINANCE_BASE_URL = "https://testnet.binance.vision"
         BINANCE_WS_URL = "wss://testnet.binance.vision/ws"
