@@ -23,6 +23,7 @@ from core.types import Address  # noqa: E402
 import safety  # noqa: E402
 from strategy.risk import RiskManager, RiskLimits, PreTradeValidator  # noqa: E402
 from core.alert import TelegramAlert  # noqa: E402
+from core.wallet import WalletManager  # noqa: E402
 
 load_dotenv()
 
@@ -90,11 +91,20 @@ class ArbBot:
 
         self.scorer = SignalScorer()
 
+        self.private_key = os.getenv("PRIVATE_KEY")
+        if not self.private_key and not self.dry_run:
+            logger.critical("PRIVATE_KEY not found in env! Cannot run in production.")
+            sys.exit(1)
+
+        self.wallet_manager = (
+            WalletManager(self.private_key) if self.private_key else None
+        )
+
         self.executor = Executor(
             exchange_client=self.exchange,
             pricing_module=self.pricing_engine,
             inventory_tracker=self.inventory,
-            wallet_manager=None,
+            wallet_manager=self.wallet_manager,
             config=ExecutorConfig(simulation_mode=self.dry_run),
         )
 
@@ -177,6 +187,79 @@ class ArbBot:
                     await asyncio.sleep(5)
         finally:
             self.telegram.send_status("Bot was fully stopped.")
+
+    def _update_internal_inventory(self, ctx):
+        """Manually updates internal state based on execution results."""
+        signal = ctx.signal
+        from decimal import Decimal
+
+        leg1_size = ctx.leg1_fill_size or 0
+        leg2_size = ctx.leg2_fill_size or 0
+
+        def get_venue(v_str):
+            return Venue.BINANCE if v_str == "cex" else Venue.WALLET
+
+        to_decimal = getattr(self.inventory, "_to_decimal", lambda x: Decimal(str(x)))
+
+        if ctx.leg1_venue and leg1_size > 0:
+            is_buy = (
+                signal.direction.name == "BUY_CEX_SELL_DEX" and ctx.leg1_venue == "cex"
+            ) or (
+                signal.direction.name == "BUY_DEX_SELL_CEX" and ctx.leg1_venue == "dex"
+            )
+
+            side = "buy" if is_buy else "sell"
+            price = ctx.leg1_fill_price
+
+            base, quote = signal.pair.split("/")
+            quote_qty = leg1_size * price
+
+            fee = (
+                quote_qty * 0.001
+                if ctx.leg1_venue == "cex"
+                else leg1_size * price * 0.003
+            )
+
+            self.inventory.record_trade(
+                venue=get_venue(ctx.leg1_venue),
+                side=side,
+                base_asset=base,
+                quote_asset=quote,
+                base_amount=to_decimal(leg1_size),
+                quote_amount=to_decimal(quote_qty),
+                fee=to_decimal(fee),
+                fee_asset=quote,
+            )
+
+        if ctx.leg2_venue and leg2_size > 0:
+            is_buy = (
+                signal.direction.name == "BUY_CEX_SELL_DEX" and ctx.leg2_venue == "cex"
+            ) or (
+                signal.direction.name == "BUY_DEX_SELL_CEX" and ctx.leg2_venue == "dex"
+            )
+
+            side = "buy" if is_buy else "sell"
+            price = ctx.leg2_fill_price
+
+            base, quote = signal.pair.split("/")
+            quote_qty = leg2_size * price
+
+            fee = (
+                quote_qty * 0.001
+                if ctx.leg2_venue == "cex"
+                else leg2_size * price * 0.003
+            )
+
+            self.inventory.record_trade(
+                venue=get_venue(ctx.leg2_venue),
+                side=side,
+                base_asset=base,
+                quote_asset=quote,
+                base_amount=to_decimal(leg2_size),
+                quote_amount=to_decimal(quote_qty),
+                fee=to_decimal(fee),
+                fee_asset=quote,
+            )
 
     async def _tick(self):
         if os.path.exists(KILL_SWITCH_FILE):
@@ -269,9 +352,17 @@ class ArbBot:
                     pair=pair, side=signal.direction.name, size=signal.size, pnl=pnl
                 )
                 self.risk_manager.record_trade(pnl)
+
+                await self._sync_balances()
+
+                is_valid = await self.verify_balances()
+                if not is_valid:
+                    return
+
             else:
                 logger.warning(f"FAILED: {ctx.error}")
                 self.telegram.send_error(f"Trade was failed: {ctx.error}")
+                await self._sync_balances()
 
             await self._sync_balances()
 
@@ -299,6 +390,57 @@ class ArbBot:
         )
 
         return float(token_amount.human)
+
+    async def verify_balances(self):
+        """
+        Compares internal Inventory state vs Actual Exchange/Chain state.
+        Stops bot if mismatch > 0.001 ETH detected.
+        """
+        logger.info("Running post-trade balance verification...")
+
+        try:
+            # CEX
+            actual_cex_all = self.exchange.fetch_balance()
+            actual_cex_eth = float(actual_cex_all.get("ETH", {}).get("free", 0.0))
+
+            # DEX (Fetch from Chain)
+            my_address = Address(self.wallet_manager.address)
+            actual_dex_eth = await self._fetch_token_balance_on_chain("ETH", my_address)
+
+            snapshot = self.inventory.snapshot()
+
+            expected_cex_eth = float(
+                snapshot["venues"]["binance"].get("ETH", {}).get("total", 0.0)
+            )
+            expected_dex_eth = float(
+                snapshot["venues"]["wallet"].get("ETH", {}).get("total", 0.0)
+            )
+
+            cex_diff = abs(actual_cex_eth - expected_cex_eth)
+            dex_diff = abs(actual_dex_eth - expected_dex_eth)
+
+            logger.info(f"VERIFY: CEX Diff={cex_diff:.6f} | DEX Diff={dex_diff:.6f}")
+
+            THRESHOLD = 0.001  # Tolerance
+            if cex_diff > THRESHOLD or dex_diff > THRESHOLD:
+                msg = (
+                    f"BALANCE MISMATCH DETECTED!\n"
+                    f"CEX: Exp={expected_cex_eth:.4f}, "
+                    f"Act={actual_cex_eth:.4f}, Diff={cex_diff:.6f}\n"
+                    f"DEX: Exp={expected_dex_eth:.4f}, "
+                    f"Act={actual_dex_eth:.4f}, Diff={dex_diff:.6f}\n"
+                    f"STOPPING BOT IMMEDIATELY."
+                )
+                logger.critical(msg)
+                self.telegram.send_critical(msg)
+                self.stop()
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Balance verification failed: {e}")
+            return True
 
     def stop(self):
         self.running = False
