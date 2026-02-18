@@ -99,9 +99,12 @@ class ArbBot:
         )
 
         self.risk_limits = RiskLimits(
-            max_trade_usd=5.0, max_daily_loss=10.0, max_drawdown_pct=0.20
+            max_trade_usd=5.0, max_daily_loss=10.0, max_drawdown_pct=0.15
         )
         self.risk_manager = RiskManager(self.risk_limits, initial_capital=100.0)
+
+        self.session_trade_count = 0
+        self.max_session_trades = 5
         self.pre_trade_validator = PreTradeValidator()
         self.trades_this_hour = 0
         self.last_hour_reset = time.time()
@@ -279,6 +282,23 @@ class ArbBot:
                 self.inventory.update_from_cex(Venue.BINANCE, balances)
         except Exception as e:
             logger.error(f"Balance sync error: {e}")
+
+    async def _fetch_token_balance_on_chain(
+        self, symbol: str, address: Address
+    ) -> float:
+        """Отримує баланс токена з мережі та повертає як float."""
+        try:
+            token_address = self.config.get_token_address(symbol)
+            decimals = self.config.get_token_decimals(symbol)
+        except AttributeError:
+            token_address = getattr(self.config, symbol.upper())
+            decimals = 6 if symbol.upper() == "USDC" else 18
+
+        token_amount = self.chain_client.get_token_balance(
+            token_address, address.checksum, symbol, decimals
+        )
+
+        return float(token_amount.human)
 
     def stop(self):
         self.running = False

@@ -178,3 +178,23 @@ class ChainClient:
         except Exception as e:
             print(f"Error fetching gas price: {e}")
             return 30.0
+
+    def get_token_balance(
+        self, token_address: str, wallet_address: str, symbol: str, decimals: int
+    ) -> TokenAmount:
+        """Gets the ERC-20 token balance via eth_call."""
+        data_hex = f"0x70a08231000000000000000000000000{wallet_address[2:].lower()}"
+
+        tx_request = TransactionRequest(
+            to=Address(token_address),
+            value=TokenAmount(0, decimals, symbol),
+            data=bytes.fromhex(data_hex[2:]),
+        )
+
+        try:
+            response = self.call(tx_request, block="latest")
+            raw_balance = int(response.hex(), 16) if response else 0
+            return TokenAmount(raw_balance, decimals, symbol)
+        except Exception as e:
+            print(f"Error fetching {symbol} balance: {e}")
+            return TokenAmount(0, decimals, symbol)

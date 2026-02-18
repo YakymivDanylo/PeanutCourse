@@ -54,3 +54,23 @@ class Config:
         MIN_NOTIONAL = 5.0
         ETH_LOT_SIZE_STEP = 0.0001
         ETH_PRICE_TICK = 0.01
+
+    def get_token_address(self, symbol: str) -> str:
+        """Returns the token address based on the symbol (WETH, USDC)."""
+        symbol = symbol.upper()
+        if symbol == "ETH" or symbol == "WETH":
+            return self.WETH
+        if symbol == "USDC":
+            return self.USDC
+
+        raise ValueError(f"Address for token {symbol} is not defined in config")
+
+    def get_token_decimals(self, symbol: str) -> int:
+        """
+        Returns the number of decimal places.
+        On Arbitrum/Mainnet USDC has 6 decimal places, WETH has 18.
+        """
+        symbol = symbol.upper()
+        if symbol in ["USDC", "USDT"]:
+            return 6
+        return 18
