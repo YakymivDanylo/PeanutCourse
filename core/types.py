@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 from decimal import Decimal
 from eth_utils import is_address, to_checksum_address
+from config import Config
 
 
 @dataclass(frozen=True)
@@ -91,7 +92,7 @@ class TransactionRequest:
     gas_limit: Optional[int] = None
     max_fee_per_gas: Optional[int] = None
     max_priority_fee: Optional[int] = None
-    chain_id: int = 1
+    chain_id: int = Config.CHAIN_ID
     type: int = 2  # EIP-1559
 
     def to_dict(self) -> dict:

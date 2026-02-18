@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import time
 from typing import Optional
 
+from decimal import Decimal
 from web3.exceptions import Web3Exception
 
 from chain.exceptions import (
@@ -162,7 +163,7 @@ class ChainClient:
         clean_tx_dict = {k: v for k, v in tx_dict.items() if v is not None}
         return self._retry(self._w3.eth.call, clean_tx_dict, block)
 
-    def get_gas_price_gwei(self) -> int:
+    def get_gas_price_gwei(self) -> Decimal:
         """
         Fetches the current gas price from the network and converts it to Gwei.
         Returns an integer (e.g., 30).
@@ -172,7 +173,8 @@ class ChainClient:
 
             gwei_price = self._w3.from_wei(wei_price, "gwei")
 
-            return int(gwei_price)
+            return Decimal(str(gwei_price))
+
         except Exception as e:
             print(f"Error fetching gas price: {e}")
-            return 30
+            return 30.0

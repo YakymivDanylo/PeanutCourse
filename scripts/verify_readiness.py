@@ -1,5 +1,6 @@
 import sys
 import os
+from decimal import Decimal
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -14,6 +15,8 @@ try:
     from strategy.fees import FeeStructure
     from safety import ABSOLUTE_MAX_TRADE_USD, ABSOLUTE_MAX_DAILY_LOSS, safety_check
     import safety
+    from pricing.amm import UniswapV2Pair
+    from core.types import Address
 except ImportError as e:
     print(f"Error importing modules: {e}")
     sys.exit(1)
@@ -41,12 +44,17 @@ def test_readiness():
         book = client.fetch_order_book("ETH/USDC", limit=5)
 
         if book and book["bids"] and book["asks"]:
+            binance_price = book["bids"][0][0]
             print_status(
-                "Binance Read Orderbook", True, f"Top Bid: {book['bids'][0][0]}"
+                "Binance Read Orderbook",
+                True,
+                f"Top Bid: {book['bids'][0][0]} Top Ask {book['asks'][0][0]}",
             )
         else:
+            binance_price = None
             print_status("Binance Read Orderbook", False, "Empty orderbook")
     except Exception as e:
+        binance_price = None
         print_status("Binance Connection", False, str(e))
 
     print("\n--- 2. Arbitrum Connection ---")
@@ -56,15 +64,33 @@ def test_readiness():
                 "Arbitrum Pool Config", False, "POOL_ADDRESS is empty in config.py!"
             )
         else:
-            rpc_url = "https://arb1.arbitrum.io/rpc"
+            rpc_url = Config.RPC_URL
             chain_client = ChainClient([rpc_url])
 
             gas_price = chain_client.get_gas_price_gwei()
             print_status(
-                "Arbitrum RPC Connection", True, f"Current Gas: {gas_price} Gwei"
+                "Arbitrum RPC Connection", True, f"Current Gas: {gas_price:.4f} Gwei"
             )
 
-            print_status("Arbitrum Read", True, "Connection established")
+            pool_addr = Address(Config.POOL_ADDRESS)
+            pair = UniswapV2Pair.from_chain(pool_addr, chain_client)
+
+            res_in, res_out = pair._get_reserve(Address(Config.WETH))
+
+            normalized_in = Decimal(res_in) / Decimal(10**18)
+            normalized_out = Decimal(res_out) / Decimal(10**6)
+
+            if normalized_in > 0:
+                dex_price = normalized_out / normalized_in
+                print_status(
+                    "Arbitrum Read Price", True, f"DEX Spot Price: {dex_price:.4f}"
+                )
+            else:
+                print_status("Arbitrum Read Price", False, "No liquidity")
+
+            if binance_price:
+                diff = abs(float(dex_price) - float(binance_price))
+                print(f"   ℹ️  Price Diff: {diff:.2f} USDC")
 
     except Exception as e:
         print_status("Arbitrum Connection", False, str(e))
