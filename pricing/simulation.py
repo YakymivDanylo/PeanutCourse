@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 import time
 import logging
-
+from core.wallet import WalletManager
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -30,38 +30,109 @@ class ForkSimulator:
 
     ROUTER_ADDRESS = Address("0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506")
     WETH_ADDRESS = Address("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1")
-    USDT_ADDRESS = Address("0xdAC17F958D2ee523a2206206994597C13D831ec7")
-    USDC_ADDRESS = Address("0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8")
-
-    WHALES = {
-        "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8": Address(
-            "0x47c031236e197323a311907186930732dd4c659e"
-        ),
-        "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1": Address(
-            "0xba12222222228d8ba445958a75a0704d566bf2c8"
-        ),
-    }
 
     SWAP_EXACT_TOKENS_FOR_TOKENS = function_signature_to_4byte_selector(
         "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
     )
 
     ERC20_APPROVE = function_signature_to_4byte_selector("approve(address,uint256)")
+    ERC20_ALLOWANCE = function_signature_to_4byte_selector("allowance(address,address)")
+    ERC20_BALANCE_OF = function_signature_to_4byte_selector("balanceOf(address)")
     WETH_DEPOSIT = function_signature_to_4byte_selector("deposit()")
 
-    def __init__(self, fork_url: str):
+    def __init__(self, fork_url: str, wallet: Optional[WalletManager] = None):
         self.w3 = Web3(Web3.HTTPProvider(fork_url))
+        self.wallet = wallet
         if not self.w3.is_connected():
-            raise ConnectionError("RPC connection failed")
+            logger.warning(f"Forksimulation failed to connect to {fork_url}")
 
     def _impersonate(self, address: Address):
         """Unlock account on Anvil"""
-        self.w3.provider.make_request("anvil_impersonateAccount", [address.checksum])
+        if self.wallet and address.checksum == self.wallet.address:
+            return
+        try:
+            self.w3.provider.make_request(
+                "anvil_impersonateAccount", [address.checksum]
+            )
+        except Exception:
+            pass
 
     def _stop_impersonating(self, address: Address):
-        self.w3.provider.make_request(
-            "anvil_stopImpersonatingAccount", [address.checksum]
+        if self.wallet and address.checksum == self.wallet.address:
+            return
+        try:
+            self.w3.provider.make_request(
+                "anvil_stopImpersonatingAccount", [address.checksum]
+            )
+        except Exception:
+            pass
+
+    def _get_allowance(self, token: Address, owner: Address, spender: Address) -> int:
+        """Read allowance via eth_call"""
+        data = self.ERC20_ALLOWANCE + encode(
+            ["address", "address"], [owner.checksum, spender.checksum]
         )
+        tx = {"to": token.checksum, "data": data}
+        try:
+            res = self.w3.eth.call(tx)
+            return int.from_bytes(res, "big") if res else 0
+        except Exception:
+            return 0
+
+    def _get_balance(self, token: Address, owner: Address) -> int:
+        """Read balance via eth_call"""
+        data = self.ERC20_BALANCE_OF + encode(["address"], [owner.checksum])
+        tx = {"to": token.checksum, "data": data}
+        try:
+            res = self.w3.eth.call(tx)
+            return int.from_bytes(res, "big") if res else 0
+        except Exception:
+            return 0
+
+    def _send_signed(self, tx_params: dict):
+        """Sign and send a transaction using the local wallet."""
+        if not self.wallet:
+            raise ValueError("No wallet available for signing")
+
+        tx_params.pop("from", None)
+
+        if "nonce" not in tx_params:
+            tx_params["nonce"] = self.w3.eth.get_transaction_count(self.wallet.address)
+
+        if "chainId" not in tx_params:
+            tx_params["chainId"] = self.w3.eth.chain_id
+
+        if "gasPrice" not in tx_params:
+            try:
+                base_gas_price = self.w3.eth.gas_price
+                tx_params["gasPrice"] = int(base_gas_price * 1.35)
+            except Exception:
+                pass
+
+        try:
+            signed_tx = self.wallet.sign_transaction(tx_params)
+        except Exception as e:
+            logger.error(f"Signing error: {e}. Params: {tx_params}")
+            raise e
+
+        try:
+            if hasattr(signed_tx, "rawTransaction"):
+                raw_tx = signed_tx.rawTransaction
+            else:
+                raw_tx = signed_tx[0]
+
+            raw_tx_hex = raw_tx.hex() if hasattr(raw_tx, "hex") else raw_tx
+
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx_hex)
+
+            logger.info(f"Sent signed tx: {tx_hash.hex()}")
+            return self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+        except Exception as e:
+            logger.error(
+                f"Send Raw Tx failed: {e} "
+                f"| SignedTx Type: {type(signed_tx)} | Dir: {dir(signed_tx)}"
+            )
+            raise e
 
     def _set_balance_ether(self, address: Address, amount_eth: float = 10.0):
         """Give an account eth for gas"""
@@ -69,70 +140,93 @@ class ForkSimulator:
         self.w3.provider.make_request("anvil_setBalance", [address.checksum, hex(wei)])
 
     def _approve(self, token: Address, spender: Address, sender: Address):
-        """
-        Force approve token for spender. Handles USDT reset-to-zero quirk.
-        """
-        max_amount = 2**256 - 1
+        """Approve token. Uses signing if sender is our wallet."""
+        if self.wallet and sender.checksum == self.wallet.address:
+            current_allowance = self._get_allowance(token, sender, spender)
+            if current_allowance >= 2**255:
+                return
 
-        data_zero = self.ERC20_APPROVE + encode(
-            ["address", "uint256"], [spender.checksum, 0]
-        )
-        tx_zero = {
-            "from": sender.checksum,
-            "to": token.checksum,
-            "data": data_zero,
-            "gas": 60000,
-            "gasPrice": self.w3.eth.gas_price,
-            "value": 0,
-        }
+            logger.info(f"Approving {token.checksum} for router (Local Sign)...")
+            max_amount = 2**256 - 1
+            data = self.ERC20_APPROVE + encode(
+                ["address", "uint256"], [spender.checksum, max_amount]
+            )
 
-        try:
-            self.w3.eth.send_transaction(tx_zero)
-        except Exception:
-            pass
-
-        data_max = self.ERC20_APPROVE + encode(
-            ["address", "uint256"], [spender.checksum, max_amount]
-        )
-        tx_max = {
-            "from": sender.checksum,
-            "to": token.checksum,
-            "data": data_max,
-            "gas": 100000,
-            "gasPrice": self.w3.eth.gas_price,
-            "value": 0,
-        }
+            tx = {
+                "to": token.checksum,
+                "data": data,
+                "gas": 200000,
+            }
+            try:
+                self._send_signed(tx)
+            except Exception as e:
+                logger.error(f"Signed Approve failed: {e}")
+            return
 
         try:
-            tx_hash = self.w3.eth.send_transaction(tx_max)
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-            if receipt.status != 1:
-                logger.warning(f"Approve transaction reverted for {token.checksum}")
+            max_amount = 2**256 - 1
+            data_max = self.ERC20_APPROVE + encode(
+                ["address", "uint256"], [spender.checksum, max_amount]
+            )
+            tx_max = {
+                "from": sender.checksum,
+                "to": token.checksum,
+                "data": data_max,
+                "gas": 100000,
+                "gasPrice": self.w3.eth.gas_price,
+                "value": 0,
+            }
+
+            self.w3.eth.send_transaction(tx_max)
         except Exception as e:
-            logger.error(f"Approve failed: {e}")
+            logger.error(f"Fork Approve failed: {e}")
 
     def _wrap_eth(self, amount: int, sender: Address):
-        """Deposit ETH to get WETH."""
-        safe_amount = amount * 10
-        tx: TxParams = {
-            "from": sender.checksum,
-            "to": self.WETH_ADDRESS.checksum,
-            "data": self.WETH_DEPOSIT,
-            "gas": 100000,
-            "gasPrice": self.w3.eth.gas_price,
-            "value": safe_amount,
-        }
+        """Deposit ETH. Uses signing if sender is our wallet."""
+        if self.wallet and sender.checksum == self.wallet.address:
+            try:
+                weth_bal = self._get_balance(self.WETH_ADDRESS, sender)
+                if weth_bal >= amount:
+                    return
+
+                needed = amount - weth_bal
+                if needed <= 0:
+                    return
+
+                logger.info(f"Wrapping {needed / 1e18:.4f} ETH (Local Sign)...")
+
+                tx = {
+                    "to": self.WETH_ADDRESS.checksum,
+                    "data": self.WETH_DEPOSIT,
+                    "gas": 200000,
+                    "value": int(needed * 1.01),
+                }
+                self._send_signed(tx)
+                logger.info("✅ Wrap successful")
+            except Exception as e:
+                logger.error(f"Signed Wrap failed: {e}")
+            return
+
         try:
-            tx_hash = self.w3.eth.send_transaction(tx)
-            self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            tx = {
+                "from": sender.checksum,
+                "to": self.WETH_ADDRESS.checksum,
+                "data": self.WETH_DEPOSIT,
+                "gas": 100000,
+                "gasPrice": self.w3.eth.gas_price,
+                "value": amount * 10,
+            }
+            self.w3.eth.send_transaction(tx)
         except Exception as e:
-            logger.error(f"Wrap ETH failed: {e}")
+            logger.error(f"Fork Wrap failed: {e}")
 
     def simulate_swap(
         self, router: Address, swap_params: dict, sender: Address
     ) -> SimulationResult:
-        """Simulate a swap and return detailed results."""
+        """Simulate a swap. Uses eth_call for safety on real nets."""
         self._impersonate(sender)
+
+        gas_price = int(self.w3.eth.gas_price * 1.2)
 
         tx: TxParams = {
             "from": sender.checksum,
@@ -140,15 +234,27 @@ class ForkSimulator:
             "data": swap_params.get("data", b""),
             "value": swap_params.get("value", 0),
             "gas": 500_000,
-            "gasPrice": self.w3.eth.gas_price,
+            "gasPrice": gas_price,
         }
 
         try:
-            gas_estimate = self.w3.eth.estimate_gas(tx)
-            tx["gas"] = int(gas_estimate * 1.2)
+            try:
+                gas_estimate = self.w3.eth.estimate_gas(tx)
+                tx["gas"] = int(gas_estimate * 1.2)
+            except Exception as e:
+                return SimulationResult(False, 0, 0, f"Estimate failed: {e}", [])
 
-            tx_hash = self.w3.eth.send_transaction(tx)
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            if self.wallet and sender.checksum == self.wallet.address:
+                receipt_status = 1
+                gas_used = gas_estimate
+                logs = []
+            else:
+                tx_hash = self.w3.eth.send_transaction(tx)
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+                receipt_status = receipt["status"]
+                gas_used = receipt["gasUsed"]
+                logs = receipt["logs"]
+
             raw_return = self.w3.eth.call(tx)
 
             try:
@@ -161,11 +267,11 @@ class ForkSimulator:
                 amount_out_sim = 0
 
             return SimulationResult(
-                success=receipt["status"] == 1,
+                success=receipt_status == 1,
                 amount_out=amount_out_sim,
-                gas_used=receipt["gasUsed"],
+                gas_used=gas_used,
                 error=None,
-                logs=receipt["logs"],
+                logs=logs,
             )
         except Exception as e:
             return SimulationResult(
@@ -185,15 +291,43 @@ class ForkSimulator:
         path_addresses = [t.checksum for t in route.path]
         deadline = int(time.time()) + 3600
         token_in = route.path[0]
-
         sim_sender = sender
 
-        if token_in.checksum in self.WHALES:
-            sim_sender = self.WHALES[token_in.checksum]
+        if self.wallet and sim_sender.checksum == self.wallet.address:
+            try:
+                balance = self._get_balance(token_in, sim_sender)
+
+                if balance < amount_in:
+                    decimals = (
+                        6
+                        if token_in.checksum
+                        in [
+                            "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+                            "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+                        ]
+                        else 18
+                    )
+
+                    human_bal = balance / (10**decimals)
+                    human_req = amount_in / (10**decimals)
+
+                    msg = (
+                        f"Skipped: Insufficient balance of"
+                        f" {token_in.checksum}. Have: {human_bal:.4f}, "
+                        f"Need: {human_req:.4f}"
+                    )
+
+                    return SimulationResult(
+                        success=False, amount_out=0, gas_used=0, error=msg, logs=[]
+                    )
+            except Exception as e:
+                logger.warning(f"Balance check failed: {e}")
 
         try:
             self._impersonate(sim_sender)
-            self._set_balance_ether(sim_sender, 10.0)
+
+            if not (self.wallet and sim_sender.checksum == self.wallet.address):
+                self._set_balance_ether(sim_sender, 10.0)
 
             if token_in.checksum == self.WETH_ADDRESS.checksum:
                 self._wrap_eth(amount_in, sim_sender)

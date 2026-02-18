@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 import logging
-from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from config import Config
 from exchange.client import ExchangeClient
@@ -12,13 +11,12 @@ from inventory.tracker import InventoryTracker
 from pricing.engine import PricingEngine
 from strategy.signal import Signal, Direction
 from executor.recovery import CircuitBreaker, ReplayProtection
-from chain.builder import TransactionBuilder
 from core.wallet import WalletManager
-from core.types import Address, TokenAmount
+from core.types import Address
 
 logger = logging.getLogger(__name__)
 
-ROUTER_ADDRESS = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+ROUTER_ADDRESS = Address("0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506")
 SWAP_EXACT_TOKENS_FOR_TOKENS = function_signature_to_4byte_selector(
     "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
 )
@@ -292,97 +290,126 @@ class Executor:
             return {"success": False, "error": str(e)}
 
     async def _execute_dex_leg(self, signal: Signal, size: float) -> dict:
+        """Executes a swap on DEX with local signing using pricing.client."""
+
+        # 1. Simulation Check
         if self.config.simulation_mode:
             await asyncio.sleep(0.5)
-            return {"success": True, "price": signal.dex_price * 0.9998, "filled": size}
-
-        base_sym, quote_sym = signal.pair.split("/")
-
-        if signal.direction == Direction.BUY_CEX_SELL_DEX:
-            token_in_sym = base_sym
-            token_out_sym = quote_sym
-            amount_in_human = size
-        else:
-            token_in_sym = quote_sym
-            token_out_sym = base_sym
-            amount_in_human = size * signal.dex_price
-
-        decimals_in = DECIMALS.get(token_in_sym, 18)
-        amount_in_raw = int(amount_in_human * (10**decimals_in))
-
-        token_in_addr = Address(TOKEN_MAP[token_in_sym])
-        token_out_addr = Address(TOKEN_MAP[token_out_sym])
+            return {
+                "success": True,
+                "price": signal.dex_price,
+                "filled": size,
+                "tx_hash": "0xsimulated",
+            }
 
         try:
-            gas_price_gwei = self.pricing.client.get_gas_price_gwei()
-            quote = self.pricing.get_quote(
-                token_in_addr, token_out_addr, amount_in_raw, gas_price_gwei
+            chain_client = self.pricing.client
+            w3 = chain_client._w3
+
+            base_sym, quote_sym = signal.pair.split("/")
+
+            if signal.direction.name == "BUY_CEX_SELL_DEX":
+                token_in_sym = base_sym
+                token_out_sym = quote_sym
+                amount_in_human = size
+            else:
+                token_in_sym = quote_sym
+                token_out_sym = base_sym
+                amount_in_human = size * signal.dex_price
+
+            token_in_addr = self.config.get_token_address(token_in_sym)
+            token_out_addr = self.config.get_token_address(token_out_sym)
+
+            decimals_in = 18 if token_in_sym.upper() == "ETH" else 6
+            amount_in_raw = int(amount_in_human * (10**decimals_in))
+
+            if token_in_sym.upper() != "ETH":
+                contract = w3.eth.contract(
+                    address=token_in_addr, abi=self.config.ERC20_ABI
+                )
+                allowance = contract.functions.allowance(
+                    self.wallet.address, self.config.ROUTER
+                ).call()
+
+                if allowance < amount_in_raw:
+                    logger.info(f"Approving {token_in_sym}...")
+                    nonce = w3.eth.get_transaction_count(self.wallet.address)
+                    approve_tx = contract.functions.approve(
+                        self.config.ROUTER, 2**256 - 1
+                    ).build_transaction(
+                        {
+                            "from": self.wallet.address,
+                            "nonce": nonce,
+                            "gasPrice": w3.eth.gas_price,
+                            "chainId": self.config.CHAIN_ID,
+                        }
+                    )
+
+                    signed_approve = self.wallet.sign_transaction(approve_tx)
+                    tx_hash = w3.eth.send_raw_transaction(signed_approve)
+                    logger.info(f"Approve sent: {tx_hash.hex()}. Waiting...")
+                    time.sleep(15)
+
+            router_contract = w3.eth.contract(
+                address=self.config.ROUTER, abi=self.config.ROUTER_ABI
             )
 
-            min_amount_out = int(quote.expected_output * 0.99)
             deadline = int(time.time()) + 120
-            path = [t.checksum for t in quote.route.path]
-            to = self.wallet.address
+            path = [token_in_addr, token_out_addr]
+            nonce = w3.eth.get_transaction_count(self.wallet.address)
+            gas_price = w3.eth.gas_price
 
-            is_native_in = token_in_sym == "ETH"
-            is_native_out = token_out_sym == "ETH"
+            tx_params = {
+                "from": self.wallet.address,
+                "nonce": nonce,
+                "gasPrice": gas_price,
+                "gas": 400000,
+                "chainId": self.config.CHAIN_ID,
+            }
 
-            data = b""
-            value_raw = TokenAmount(0, 18)
-
-            if is_native_in:
+            if token_in_sym.upper() == "ETH":
                 # swapExactETHForTokens
-                args = encode(
-                    ["uint256", "address[]", "address", "uint256"],
-                    [min_amount_out, path, to, deadline],
+                tx_params["value"] = amount_in_raw
+                func = router_contract.functions.swapExactETHForTokens(
+                    0, path, self.wallet.address, deadline
                 )
-                data = SWAP_EXACT_ETH_FOR_TOKENS + args
-                value_raw = TokenAmount(amount_in_raw, 18)
-
-            elif is_native_out:
+            elif token_out_sym.upper() == "ETH":
                 # swapExactTokensForETH
-                args = encode(
-                    ["uint256", "uint256", "address[]", "address", "uint256"],
-                    [amount_in_raw, min_amount_out, path, to, deadline],
+                tx_params["value"] = 0
+                func = router_contract.functions.swapExactTokensForETH(
+                    amount_in_raw, 0, path, self.wallet.address, deadline
                 )
-                data = SWAP_EXACT_TOKENS_FOR_ETH + args
             else:
                 # swapExactTokensForTokens
-                args = encode(
-                    ["uint256", "uint256", "address[]", "address", "uint256"],
-                    [amount_in_raw, min_amount_out, path, to, deadline],
+                tx_params["value"] = 0
+                func = router_contract.functions.swapExactTokensForTokens(
+                    amount_in_raw, 0, path, self.wallet.address, deadline
                 )
-                data = SWAP_EXACT_TOKENS_FOR_TOKENS + args
 
-            builder = TransactionBuilder(self.pricing.client, self.wallet)
-            builder.to(ROUTER_ADDRESS)
-            builder.value(value_raw)
-            builder.data(data)
-            builder.with_gas_estimate()
-            builder.with_gas_price()
+            unsigned_tx = func.build_transaction(tx_params)
 
-            receipt = builder.send_and_wait(timeout=60)
+            signed_tx = self.wallet.sign_transaction(unsigned_tx)
 
-            if receipt.status:
-                amount_out_human = float(quote.expected_output) / (
-                    10 ** DECIMALS[token_out_sym]
-                )
-                fill_price = amount_out_human / size if size else 0
-                return {
-                    "success": True,
-                    "price": fill_price,
-                    "filled": size,
-                    "tx_hash": receipt.tx_hash,
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "TX Reverted",
-                    "tx_hash": receipt.tx_hash,
-                }
+            raw_tx = (
+                signed_tx.rawTransaction
+                if hasattr(signed_tx, "rawTransaction")
+                else signed_tx
+            )
+
+            logger.info(f"Sending DEX tx: {signal.side} {size} {signal.pair}")
+            tx_hash_bytes = w3.eth.send_raw_transaction(raw_tx)
+            tx_hash_hex = tx_hash_bytes.hex()
+
+            return {
+                "success": True,
+                "price": signal.dex_price,
+                "filled": size,
+                "tx_hash": tx_hash_hex,
+            }
 
         except Exception as e:
-            return {"success": False, "error": f"DEX Execution failed: {e}"}
+            logger.error(f"DEX Execution failed: {e}")
+            return {"success": False, "error": str(e)}
 
     async def _unwind(self, ctx: ExecutionContext):
         """Market sell to flatten stuck position."""

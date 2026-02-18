@@ -7,6 +7,7 @@ from web3 import Web3
 
 from chain.client import ChainClient
 from core.types import Address
+from core.wallet import WalletManager
 from pricing.amm import UniswapV2Pair
 from pricing.mempool import MempoolMonitor, ParsedSwap
 from pricing.routing import Route, RouteFinder
@@ -48,9 +49,16 @@ class PricingEngine:
     Integrates AMM math, routing, simulation, and mempool monitoring.
     """
 
-    def __init__(self, chain_client: ChainClient, fork_url: str, ws_url: str):
+    def __init__(
+        self,
+        chain_client: ChainClient,
+        fork_url: str,
+        ws_url: str,
+        wallet: Optional[WalletManager] = None,
+    ):
         self.client = chain_client
-        self.simulator = ForkSimulator(fork_url)
+        self.wallet = wallet
+        self.simulator = ForkSimulator(fork_url, wallet=self.wallet)
 
         http_rpc = self.client.rpc_urls[0] if self.client.rpc_urls else fork_url
 
@@ -114,7 +122,11 @@ class PricingEngine:
                 f"No route found for {token_in.checksum} -> {token_out.checksum}"
             )
 
-        sim_sender = Address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+        if self.wallet:
+            sim_sender = Address(self.wallet.address)
+        else:
+            sim_sender = Address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+
         sim_result = self.simulator.simulate_route(route, amount_in, sim_sender)
 
         if not sim_result.success:

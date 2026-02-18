@@ -69,8 +69,17 @@ class ArbBot:
 
         self.chain_client = ChainClient([rpc_url])
 
+        self.private_key = os.getenv("PRIVATE_KEY")
+        if not self.private_key and not self.dry_run:
+            logger.critical("PRIVATE_KEY not found in env! Cannot run in production.")
+            sys.exit(1)
+
+        self.wallet_manager = (
+            WalletManager(self.private_key) if self.private_key else None
+        )
+
         self.pricing_engine = PricingEngine(
-            self.chain_client, rpc_url, Config.CHAIN_WS_URL
+            self.chain_client, rpc_url, Config.CHAIN_WS_URL, self.wallet_manager
         )
 
         self.inventory = InventoryTracker()
@@ -90,15 +99,6 @@ class ArbBot:
         )
 
         self.scorer = SignalScorer()
-
-        self.private_key = os.getenv("PRIVATE_KEY")
-        if not self.private_key and not self.dry_run:
-            logger.critical("PRIVATE_KEY not found in env! Cannot run in production.")
-            sys.exit(1)
-
-        self.wallet_manager = (
-            WalletManager(self.private_key) if self.private_key else None
-        )
 
         self.executor = Executor(
             exchange_client=self.exchange,
@@ -174,11 +174,16 @@ class ArbBot:
         except Exception as e:
             logger.error(f"Failed to initialize pricing engine: {e}")
 
+        logger.info("DEBUG: Syncing balances (Possible blocking point)...")
         await self._sync_balances()
+        logger.info("DEBUG: Balances synced. Entering main loop...")
+
         try:
             while self.running:
                 try:
+                    logger.info("DEBUG: Tick start...")
                     await self._tick()
+                    logger.info("DEBUG: Tick end. Sleeping 1s...")
                     await asyncio.sleep(1)
                 except Exception as e:
                     error_msg = f"Tick error: {e}"
@@ -281,8 +286,18 @@ class ArbBot:
             self.last_hour_reset = time.time()
 
         for pair in self.pairs:
-            signal = self.generator.generate(pair, self.trade_size)
-            if signal is None:
+            logger.info(f"DEBUG: Generating signal for {pair}...")
+
+            try:
+                signal = await asyncio.wait_for(
+                    asyncio.to_thread(self.generator.generate, pair, self.trade_size),
+                    timeout=10.0,
+                )
+            except asyncio.TimeoutError:
+                logger.error("DEBUG: Signal generation timed out (RPC/CEX slow?)")
+                continue
+            except Exception as e:
+                logger.error(f"DEBUG: Signal gen error: {e}")
                 continue
 
             if signal:
@@ -293,6 +308,7 @@ class ArbBot:
                 )
             else:
                 logger.info("DEBUG: No signal generated (Spread too low or negative?)")
+                continue
 
             current_skews = (
                 self.inventory.get_skews()
@@ -302,6 +318,7 @@ class ArbBot:
             signal.score = self.scorer.score(signal, current_skews)
 
             if signal.score < 60:
+                logger.info(f"DEBUG: Low score {signal.score}. Skipping.")
                 continue
 
             valid, reason = self.pre_trade_validator.validate_signal(signal)
@@ -369,16 +386,21 @@ class ArbBot:
 
     async def _sync_balances(self):
         try:
-            balances = self.exchange.fetch_balance()
+            logger.info("DEBUG: Fetching CEX balances...")
+            loop = asyncio.get_running_loop()
+            balances = await loop.run_in_executor(None, self.exchange.fetch_balance)
+
+            logger.info("DEBUG: Updating inventory...")
             if hasattr(self.inventory, "update_from_cex"):
                 self.inventory.update_from_cex(Venue.BINANCE, balances)
+            logger.info("DEBUG: Balances updated.")
         except Exception as e:
             logger.error(f"Balance sync error: {e}")
 
     async def _fetch_token_balance_on_chain(
         self, symbol: str, address: Address
     ) -> float:
-        """Отримує баланс токена з мережі та повертає як float."""
+        """Gets the token balance from the network and returns it as a float."""
         try:
             token_address = self.config.get_token_address(symbol)
             decimals = self.config.get_token_decimals(symbol)
@@ -454,7 +476,7 @@ if __name__ == "__main__":
         "pairs": ["ETH/USDC"] if Config.PRODUCTION else ["ETH/USDC"],
         "trade_size": 0.001 if Config.PRODUCTION else 0.1,
         "dry_run": Config.DRY_RUN,
-        "signal_config": {"min_spread_bps": 5},
+        "signal_config": {"min_spread_bps": 1, "min_profit_usd": -10.0},
     }
 
     print("--- STARTING ARB BOT ---")

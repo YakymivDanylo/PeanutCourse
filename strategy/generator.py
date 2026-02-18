@@ -16,6 +16,8 @@ TOKEN_MAP = {
 }
 DECIMALS = {"ETH": 18, "WETH": 18, "USDT": 6, "USDC": 6}
 
+logger = logging.getLogger(__name__)
+
 
 class SignalGenerator:
     def __init__(
@@ -46,6 +48,7 @@ class SignalGenerator:
 
         prices = self._fetch_prices(pair, size)
         if prices is None:
+            logger.warning(f"DEBUG: Could not fetch prices for {pair}")
             return None
 
         # Spread A: Buy CEX (Ask) -> Sell DEX (Bid/Exit)
@@ -53,6 +56,13 @@ class SignalGenerator:
 
         # Spread B: Buy DEX (Ask/Entry) -> Sell CEX (Bid)
         spread_b = (prices["cex_bid"] - prices["dex_buy"]) / prices["dex_buy"] * 10_000
+
+        logger.info(
+            f"DEBUG PRICE: {pair} | Size: {size} | "
+            f"CEX {prices['cex_bid']:.2f}/{prices['cex_ask']:.2f} | "
+            f"DEX Buy:{prices['dex_buy']:.2f} Sell:{prices['dex_sell']:.2f} | "
+            f"Sprd A (C->D): {spread_a:.2f}bps | Sprd B (D->C): {spread_b:.2f}bps"
+        )
 
         if spread_a > spread_b and spread_a >= self.min_spread_bps:
             direction = Direction.BUY_CEX_SELL_DEX
@@ -74,6 +84,10 @@ class SignalGenerator:
         net_pnl = gross_pnl - fees
 
         if net_pnl < self.min_profit_usd:
+            logger.info(
+                f"DEBUG: Signal rejected."
+                f" Net PnL ${net_pnl:.4f} < Min ${self.min_profit_usd}"
+            )
             return None
 
         inventory_ok = self._check_inventory(pair, direction, size, cex_price)
@@ -126,6 +140,7 @@ class SignalGenerator:
             )
 
             if not quote_sell or quote_sell.expected_output == 0:
+                logger.warning(f"DEBUG: Quote Sell failed for {pair}")
                 return None
 
             amount_out_human = quote_sell.expected_output / (10**quote_decimals)
@@ -142,9 +157,13 @@ class SignalGenerator:
             )
 
             if not quote_buy or quote_buy.expected_output == 0:
+                logger.warning(f"DEBUG: Quote Buy failed for {pair}")
                 return None
 
             amount_out_base_human = quote_buy.expected_output / (10**base_decimals)
+
+            if amount_out_base_human == 0:
+                return None
 
             dex_buy_price = approx_usdt_in / amount_out_base_human
 
@@ -163,13 +182,36 @@ class SignalGenerator:
         self, pair: str, direction: Direction, size: float, price: float
     ) -> bool:
         base, quote = pair.split("/")
-        if direction == Direction.BUY_CEX_SELL_DEX:
-            # Check CEX Quote (USDT) & Wallet Base (ETH)
-            cex_bal = float(self.inventory.get_available("binance", quote))
-            dex_bal = float(self.inventory.get_available("wallet", base))
-            return cex_bal >= size * price and dex_bal >= size
-        else:
-            # Check CEX Base (ETH) & Wallet Quote (USDT)
-            cex_bal = float(self.inventory.get_available("binance", base))
-            dex_bal = float(self.inventory.get_available("wallet", quote))
-            return cex_bal >= size and dex_bal >= size * price
+        try:
+            if direction == Direction.BUY_CEX_SELL_DEX:
+                # Check CEX Quote (USDT) & Wallet Base (ETH)
+                cex_bal = float(self.inventory.get_available("binance", quote))
+                dex_bal = float(self.inventory.get_available("wallet", base))
+
+                # Check logic
+                has_cex = cex_bal >= size * price
+                has_dex = dex_bal >= size
+                if not (has_cex and has_dex):
+                    logger.warning(
+                        f"Inventory Low for {direction.name}: CEX_USDC={cex_bal:.2f}"
+                        f" (Need {size * price:.2f}),"
+                        f" DEX_ETH={dex_bal:.4f} (Need {size:.4f})"
+                    )
+                return has_cex and has_dex
+            else:
+                # Check CEX Base (ETH) & Wallet Quote (USDT)
+                cex_bal = float(self.inventory.get_available("binance", base))
+                dex_bal = float(self.inventory.get_available("wallet", quote))
+
+                has_cex = cex_bal >= size
+                has_dex = dex_bal >= size * price
+                if not (has_cex and has_dex):
+                    logger.warning(
+                        f"Inventory Low for {direction.name}:"
+                        f" CEX_ETH={cex_bal:.4f} (Need {size:.4f}),"
+                        f" DEX_USDC={dex_bal:.2f} (Need {size * price:.2f})"
+                    )
+                return has_cex and has_dex
+        except Exception as e:
+            logger.error(f"Inventory check error: {e}")
+            return False
