@@ -352,6 +352,7 @@ class ArbBot:
                     pair=pair, side=signal.direction.name, size=signal.size, pnl=pnl
                 )
                 self.risk_manager.record_trade(pnl)
+                self._update_internal_inventory(ctx)
 
                 await self._sync_balances()
 
