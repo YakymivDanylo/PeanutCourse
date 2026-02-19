@@ -12,9 +12,10 @@ from pricing.engine import PricingEngine
 TOKEN_MAP = {
     "ETH": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     "USDT": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-    "USDC": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+    "USDC": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "ARB": "0x912CE59144191C1204E64559FE8253a0e49E6548",
 }
-DECIMALS = {"ETH": 18, "WETH": 18, "USDT": 6, "USDC": 6}
+DECIMALS = {"ETH": 18, "WETH": 18, "USDT": 6, "USDC": 6, "ARB": 18}
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class SignalGenerator:
         self.fees = fee_structure
 
         self.min_spread_bps = config.get("min_spread_bps", 50)
-        self.min_profit_usd = config.get("min_profit_usd", 0.1)
+        self.min_profit_usd = config.get("min_profit_usd", 0.005)
         self.max_position_usd = config.get("max_position_usd", 10_000)
         self.signal_ttl = config.get("signal_ttl_seconds", 5)
         self.cooldown = config.get("cooldown_seconds", 2)

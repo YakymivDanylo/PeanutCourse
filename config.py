@@ -17,10 +17,11 @@ class Config:
             "ARBITRUM_WS_URL", "wss://arbitrum-one-rpc.publicnode.com"
         )
 
+        ARB = "0x912CE59144191C1204E64559FE8253a0e49E6548"
         WETH = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
-        USDC = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
-        ROUTER = "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24"
-        POOL_ADDRESS = "0x905dfCD5649217c42684f23958568e533C711Aa3"
+        USDC = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+        ROUTER = "0xc873fEcbd354f5A56E00E710B90EF4201db2448d"
+        POOL_ADDRESS = "0x011f31D20C8778c8Beb1093b73E3A5690Ee6271b"
 
         BINANCE_BASE_URL = "https://api.binance.com"
         BINANCE_WS_URL = "wss://stream.binance.com:9443/ws"
@@ -30,8 +31,8 @@ class Config:
         GAS_COST_USD = 0.10
 
         MIN_NOTIONAL = 5.0
-        ETH_LOT_SIZE_STEP = 0.0001
-        ETH_PRICE_TICK = 0.01
+        ARB_LOT_SIZE_STEP = 0.1
+        ARB_PRICE_TICK = 0.0001
 
     else:
         CHAIN_ID = 31337
@@ -39,6 +40,7 @@ class Config:
 
         CHAIN_WS_URL = os.getenv("WS_URL", "ws://127.0.0.1:8545")
 
+        ARB = "0x912CE59144191C1204E64559FE8253a0e49E6548"
         WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         USDC = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
         ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
@@ -52,14 +54,14 @@ class Config:
         GAS_COST_USD = 0.0
 
         MIN_NOTIONAL = 5.0
-        ETH_LOT_SIZE_STEP = 0.0001
-        ETH_PRICE_TICK = 0.01
+        ARB_LOT_SIZE_STEP = 0.1
+        ARB_PRICE_TICK = 0.0001
 
     def get_token_address(self, symbol: str) -> str:
-        """Returns the token address based on the symbol (WETH, USDC)."""
+        """Returns the token address based on the symbol (ARB, USDC)."""
         symbol = symbol.upper()
-        if symbol == "ETH" or symbol == "WETH":
-            return self.WETH
+        if symbol == "ARB":
+            return self.ARB
         if symbol == "USDC":
             return self.USDC
 

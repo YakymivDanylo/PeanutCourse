@@ -135,7 +135,7 @@ class ArbBot:
         logger.info("Initializing MOCK balances for DRY RUN...")
 
         mock_balances = {
-            "ETH": {"free": Decimal("10.0"), "total": Decimal("10.0")},
+            "ARB": {"free": Decimal("1000.0"), "total": Decimal("1000.0")},
             "USDC": {"free": Decimal("20000.0"), "total": Decimal("20000.0")},
             "USDT": {"free": Decimal("20000.0"), "total": Decimal("20000.0")},
         }
@@ -147,7 +147,7 @@ class ArbBot:
 
             if hasattr(self.inventory, "update_from_chain"):
                 chain_balances = {
-                    "ETH": Decimal("10.0"),
+                    "ARB": Decimal("1000.0"),
                     "USDC": Decimal("20000.0"),
                     "USDT": Decimal("20000.0"),
                 }
@@ -468,41 +468,41 @@ class ArbBot:
     async def verify_balances(self):
         """
         Compares internal Inventory state vs Actual Exchange/Chain state.
-        Stops bot if mismatch > 0.001 ETH detected.
+        Stops bot if mismatch > 2.0 ARB detected.
         """
         logger.info("Running post-trade balance verification...")
 
         try:
             # CEX
             actual_cex_all = self.exchange.fetch_balance()
-            actual_cex_eth = float(actual_cex_all.get("ETH", {}).get("free", 0.0))
+            actual_cex_arb = float(actual_cex_all.get("ARB", {}).get("free", 0.0))
 
             # DEX
             my_address = Address(self.wallet_manager.address)
-            actual_dex_eth = await self._fetch_token_balance_on_chain("ETH", my_address)
+            actual_dex_arb = await self._fetch_token_balance_on_chain("ARB", my_address)
 
             snapshot = self.inventory.snapshot()
 
-            expected_cex_eth = float(
-                snapshot["venues"]["binance"].get("ETH", {}).get("total", 0.0)
+            expected_cex_arb = float(
+                snapshot["venues"]["binance"].get("ARB", {}).get("total", 0.0)
             )
-            expected_dex_eth = float(
-                snapshot["venues"]["wallet"].get("ETH", {}).get("total", 0.0)
+            expected_dex_arb = float(
+                snapshot["venues"]["wallet"].get("ARB", {}).get("total", 0.0)
             )
 
-            cex_diff = abs(actual_cex_eth - expected_cex_eth)
-            dex_diff = abs(actual_dex_eth - expected_dex_eth)
+            cex_diff = abs(actual_cex_arb - expected_cex_arb)
+            dex_diff = abs(actual_dex_arb - expected_dex_arb)
 
             logger.info(f"VERIFY: CEX Diff={cex_diff:.6f} | DEX Diff={dex_diff:.6f}")
 
-            THRESHOLD = 0.001  # Tolerance
+            THRESHOLD = 2.0  # Tolerance in ARB (близько $1-3)
             if cex_diff > THRESHOLD or dex_diff > THRESHOLD:
                 msg = (
                     f"BALANCE MISMATCH DETECTED!\n"
-                    f"CEX: Exp={expected_cex_eth:.4f}, "
-                    f"Act={actual_cex_eth:.4f}, Diff={cex_diff:.6f}\n"
-                    f"DEX: Exp={expected_dex_eth:.4f}, "
-                    f"Act={actual_dex_eth:.4f}, Diff={dex_diff:.6f}\n"
+                    f"CEX: Exp={expected_cex_arb:.4f}, "
+                    f"Act={actual_cex_arb:.4f}, Diff={cex_diff:.6f}\n"
+                    f"DEX: Exp={expected_dex_arb:.4f}, "
+                    f"Act={actual_dex_arb:.4f}, Diff={dex_diff:.6f}\n"
                     f"STOPPING BOT IMMEDIATELY."
                 )
                 logger.critical(msg)
@@ -524,8 +524,8 @@ class ArbBot:
 if __name__ == "__main__":
     bot_config = {
         "rpc_url": Config.RPC_URL,
-        "pairs": ["ETH/USDC"] if Config.PRODUCTION else ["ETH/USDC"],
-        "trade_size": 0.001 if Config.PRODUCTION else 0.1,
+        "pairs": ["ARB/USDC"] if Config.PRODUCTION else ["ARB/USDC"],
+        "trade_size": 20.0 if Config.PRODUCTION else 100.0,
         "dry_run": Config.DRY_RUN,
         "signal_config": {"min_spread_bps": 5},
         "summary_hour_utc": 18,
