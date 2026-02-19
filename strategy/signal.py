@@ -30,17 +30,21 @@ class Signal:
 
     score: float
     timestamp: float
+    data_timestamp: float
     expiry: float
 
     inventory_ok: bool
     within_limits: bool
 
     @classmethod
-    def create(cls, pair: str, direction: Direction, **kwargs) -> "Signal":
+    def create(
+        cls, pair: str, direction: Direction, data_timestamp: float, **kwargs
+    ) -> "Signal":
         return cls(
             signal_id=f"{pair.replace('/', '')}_{uuid.uuid4().hex[:8]}",
             pair=pair,
             direction=direction,
+            data_timestamp=data_timestamp,
             timestamp=time.time(),
             **kwargs,
         )

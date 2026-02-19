@@ -96,6 +96,7 @@ class SignalGenerator:
         signal = Signal.create(
             pair=pair,
             direction=direction,
+            data_timestamp=prices["timestamp"],
             cex_price=cex_price,
             dex_price=dex_price,
             spread_bps=spread,
@@ -116,6 +117,7 @@ class SignalGenerator:
         return time.time() - self.last_signal_time.get(pair, 0) < self.cooldown
 
     def _fetch_prices(self, pair: str, size: float) -> Optional[dict]:
+        fetch_start_time = time.time()  # Фіксуємо час початку запитів
         try:
             ob = self.exchange.fetch_order_book(pair)
             cex_bid = float(ob["bids"][0][0])
@@ -172,6 +174,7 @@ class SignalGenerator:
                 "cex_ask": cex_ask,
                 "dex_buy": dex_buy_price,
                 "dex_sell": dex_sell_price,
+                "timestamp": fetch_start_time,
             }
 
         except Exception as e:

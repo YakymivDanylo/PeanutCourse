@@ -1,5 +1,6 @@
 # strategy/risk.py
 from dataclasses import dataclass
+import time
 
 
 @dataclass
@@ -49,9 +50,20 @@ class RiskManager:
 
 
 class PreTradeValidator:
+    def __init__(self, max_age_seconds: float = 2.0):
+        self.max_age_seconds = max_age_seconds
+
     def validate_signal(self, signal) -> tuple[bool, str]:
         if not signal:
             return False, "Empty signal"
+
+        data_age = time.time() - signal.data_timestamp
+        if data_age > self.max_age_seconds:
+            return (
+                False,
+                f"Price data too old: {data_age:.2f}s."
+                f" (Max allowed {self.max_age_seconds}s)",
+            )
 
         if signal.spread_bps < 0:
             return False, f"Negative spread: {signal.spread_bps}"

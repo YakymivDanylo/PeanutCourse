@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
 
@@ -54,7 +54,7 @@ class ArbBot:
         self.dry_run = config.get("dry_run", True)
         self.telegram = TelegramAlert()
         self.telegram.send_status(
-            f" Bot was initialized at {datetime.now()}"
+            f"🚀 Bot was initialized at {datetime.now()}"
             f' in {"DRY RUN" if self.dry_run else "PRODUCTION"}'
         )
 
@@ -157,6 +157,54 @@ class ArbBot:
         except Exception as e:
             logger.error(f"Failed to set mock balances: {e}")
 
+    async def _daily_summary_loop(self):
+        """Background task to send daily summaries at a specific UTC time."""
+        target_hour = self.config.get("summary_hour_utc", 0)
+        target_minute = self.config.get("summary_minute_utc", 0)
+
+        logger.info(
+            f"Daily summary task scheduled"
+            f" for {target_hour:02d}:{target_minute:02d} UTC"
+        )
+
+        while self.running:
+            now = datetime.utcnow()
+            target_time = now.replace(
+                hour=target_hour, minute=target_minute, second=0, microsecond=0
+            )
+
+            if now >= target_time:
+                target_time += timedelta(days=1)
+
+            wait_seconds = (target_time - now).total_seconds()
+
+            while wait_seconds > 0 and self.running:
+                sleep_time = min(wait_seconds, 60)
+                await asyncio.sleep(sleep_time)
+                wait_seconds -= sleep_time
+
+            if not self.running:
+                break
+
+            total_trades = self.risk_manager.trades_today
+            daily_pnl = self.risk_manager.daily_pnl
+            current_capital = self.risk_manager.current_capital
+
+            emoji = "🟢" if daily_pnl >= 0 else ("🔴" if daily_pnl < 0 else "⚪")
+            msg = (
+                f"📊 <b>Daily Trading Summary</b>\n"
+                f"Trades today: {total_trades}\n"
+                f"Daily PnL: {emoji} ${daily_pnl:.2f}\n"
+                f"Current Capital: ${current_capital:.2f}\n"
+            )
+            self.telegram.send_status(msg)
+            logger.info(
+                f"Daily summary sent: {total_trades} trades, PnL: ${daily_pnl:.2f}"
+            )
+
+            self.risk_manager.daily_pnl = 0.0
+            self.risk_manager.trades_today = 0
+
     async def run(self):
         self.running = True
         logger.info(f"Bot starting... ChainID: {Config.CHAIN_ID}")
@@ -171,6 +219,9 @@ class ArbBot:
                 self.pricing_engine.load_pools([Address(pool_addr)])
 
             asyncio.create_task(self.pricing_engine.start())
+
+            asyncio.create_task(self._daily_summary_loop())
+
         except Exception as e:
             logger.error(f"Failed to initialize pricing engine: {e}")
 
@@ -191,7 +242,7 @@ class ArbBot:
                     self.telegram.send_error(error_msg)
                     await asyncio.sleep(5)
         finally:
-            self.telegram.send_status("Bot was fully stopped.")
+            self.telegram.send_status("🛑 Bot was fully stopped.")
 
     def _update_internal_inventory(self, ctx):
         """Manually updates internal state based on execution results."""
@@ -426,7 +477,7 @@ class ArbBot:
             actual_cex_all = self.exchange.fetch_balance()
             actual_cex_eth = float(actual_cex_all.get("ETH", {}).get("free", 0.0))
 
-            # DEX (Fetch from Chain)
+            # DEX
             my_address = Address(self.wallet_manager.address)
             actual_dex_eth = await self._fetch_token_balance_on_chain("ETH", my_address)
 
@@ -477,6 +528,8 @@ if __name__ == "__main__":
         "trade_size": 0.001 if Config.PRODUCTION else 0.1,
         "dry_run": Config.DRY_RUN,
         "signal_config": {"min_spread_bps": 5},
+        "summary_hour_utc": 18,
+        "summary_minute_utc": 0,
     }
 
     print("--- STARTING ARB BOT ---")
