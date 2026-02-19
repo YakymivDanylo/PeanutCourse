@@ -476,7 +476,7 @@ if __name__ == "__main__":
         "pairs": ["ETH/USDC"] if Config.PRODUCTION else ["ETH/USDC"],
         "trade_size": 0.001 if Config.PRODUCTION else 0.1,
         "dry_run": Config.DRY_RUN,
-        "signal_config": {"min_spread_bps": 1, "min_profit_usd": -10.0},
+        "signal_config": {"min_spread_bps": 5},
     }
 
     print("--- STARTING ARB BOT ---")

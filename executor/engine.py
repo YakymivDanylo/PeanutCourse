@@ -411,47 +411,116 @@ class Executor:
             logger.error(f"DEX Execution failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _unwind(self, ctx: ExecutionContext):
-        """Market sell to flatten stuck position."""
+    async def _unwind(self, ctx: ExecutionContext, max_retries: int = 3) -> bool:
+        """
+        Market sell to flatten stuck position with robust retries and logging.
+        Returns True if successfully unwound, False if manual intervention is required.
+        """
+        logger.warning(
+            f"Initiating emergency "
+            f"UNWIND for {ctx.signal.pair}. Venue: {ctx.leg1_venue}"
+        )
+
         if self.config.simulation_mode:
             await asyncio.sleep(0.1)
-            return
+            logger.info("Simulated unwind successful.")
+            return True
 
-        if ctx.leg1_venue == "cex":
-            side = (
-                "sell" if ctx.signal.direction == Direction.BUY_CEX_SELL_DEX else "buy"
-            )
+        retries = 0
+        base_delay = 1.0
+
+        while retries <= max_retries:
             try:
-                self.exchange.create_market_order(
-                    symbol=ctx.signal.pair, side=side, amount=ctx.leg1_fill_size
-                )
+                if ctx.leg1_venue == "cex":
+                    side = (
+                        "sell"
+                        if ctx.signal.direction == Direction.BUY_CEX_SELL_DEX
+                        else "buy"
+                    )
+                    logger.info(
+                        f"Attempt {retries + 1}/{max_retries + 1}: "
+                        f"Unwinding on CEX. Side: {side}, Amount: {ctx.leg1_fill_size}"
+                    )
+
+                    result = self.exchange.create_market_order(
+                        symbol=ctx.signal.pair, side=side, amount=ctx.leg1_fill_size
+                    )
+
+                    logger.info(f"CEX Unwind successful: {result}")
+                    ctx.leg2_fill_price = float(
+                        result.get("avg_fill_price", ctx.signal.cex_price)
+                    )
+                    ctx.leg2_fill_size = float(
+                        result.get("amount_filled", ctx.leg1_fill_size)
+                    )
+                    return True
+
+                elif ctx.leg1_venue == "dex":
+                    reverse_dir = (
+                        Direction.BUY_CEX_SELL_DEX
+                        if ctx.signal.direction == Direction.BUY_DEX_SELL_CEX
+                        else Direction.BUY_DEX_SELL_CEX
+                    )
+
+                    logger.info(
+                        f"Attempt {retries + 1}/{max_retries + 1}: "
+                        f"Unwinding on DEX. "
+                        f"Direction: {reverse_dir}, Amount: {ctx.leg1_fill_size}"
+                    )
+
+                    unwind_signal = Signal.create(
+                        pair=ctx.signal.pair,
+                        direction=reverse_dir,
+                        cex_price=ctx.signal.cex_price,
+                        dex_price=ctx.signal.dex_price,
+                        spread_bps=0,
+                        size=ctx.leg1_fill_size,
+                        expected_gross_pnl=0,
+                        expected_fees=0,
+                        expected_net_pnl=0,
+                        score=0,
+                        expiry=0,
+                        inventory_ok=True,
+                        within_limits=True,
+                    )
+
+                    result = await self._execute_dex_leg(
+                        unwind_signal, ctx.leg1_fill_size
+                    )
+
+                    if result.get("success"):
+                        logger.info(
+                            f"DEX Unwind successful: TX Hash {result.get('tx_hash')}"
+                        )
+                        ctx.leg2_fill_price = float(
+                            result.get("price", ctx.signal.dex_price)
+                        )
+                        ctx.leg2_fill_size = float(
+                            result.get("filled", ctx.leg1_fill_size)
+                        )
+                        return True
+                    else:
+                        raise Exception(f"DEX execution failed: {result.get('error')}")
+
             except Exception as e:
-                print(f"CRITICAL: CEX Unwind failed: {e}")
+                retries += 1
+                if retries > max_retries:
+                    logger.error(
+                        f"CRITICAL: Unwind completely "
+                        f"failed after {max_retries} retries for {ctx.signal.pair}! "
+                        f"Manual intervention required. Final error: {e}",
+                        exc_info=True,
+                    )
+                    self.circuit_breaker.trip(
+                        f"Unwind completely failed for "
+                        f"{ctx.signal.pair}. "
+                        f"Manual intervention needed! Error: {str(e)}"
+                    )
+                    return False
 
-        elif ctx.leg1_venue == "dex":
-            reverse_dir = (
-                Direction.BUY_CEX_SELL_DEX
-                if ctx.signal.direction == Direction.BUY_DEX_SELL_CEX
-                else Direction.BUY_DEX_SELL_CEX
-            )
-
-            unwind_signal = Signal.create(
-                pair=ctx.signal.pair,
-                direction=reverse_dir,
-                cex_price=0,
-                dex_price=0,
-                spread_bps=0,
-                size=ctx.leg1_fill_size,
-                expected_gross_pnl=0,
-                expected_fees=0,
-                expected_net_pnl=0,
-                score=0,
-                expiry=0,
-                inventory_ok=True,
-                within_limits=True,
-            )
-
-            await self._execute_dex_leg(unwind_signal, ctx.leg1_fill_size)
+                delay = base_delay * (2 ** (retries - 1))
+                logger.warning(f"Unwind error: {e}. Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
 
     def _calculate_pnl(self, ctx: ExecutionContext) -> float:
         signal = ctx.signal

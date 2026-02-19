@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 @dataclass
 class RiskLimits:
-    max_trade_usd: float = 5.0
+    max_trade_usd: float = 10.0
     max_trade_pct: float = 0.05
-    max_daily_loss: float = 10.0
+    max_daily_loss: float = 15.0
     max_drawdown_pct: float = 0.20
     max_consecutive_losses: int = 3
 
