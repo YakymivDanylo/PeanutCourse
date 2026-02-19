@@ -33,6 +33,7 @@ async def test_arb_bot_single_tick_integration():
         valid_signal = Signal.create(
             pair="ETH/USDT",
             direction=Direction.BUY_CEX_SELL_DEX,
+            data_timestamp=time.time(),
             cex_price=2000.0,
             dex_price=2050.0,
             spread_bps=250.0,

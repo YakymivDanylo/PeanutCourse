@@ -43,6 +43,7 @@ def test_signal_is_valid_logic():
     base_signal_params = {
         "pair": "ETH/USDT",
         "direction": Direction.BUY_CEX_SELL_DEX,
+        "data_timestamp": time.time(),
         "cex_price": 2000.0,
         "dex_price": 2020.0,
         "spread_bps": 100,

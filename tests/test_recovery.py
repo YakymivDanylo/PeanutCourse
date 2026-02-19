@@ -9,6 +9,7 @@ def signal():
     return Signal.create(
         pair="ETH/USDT",
         direction=Direction.BUY_CEX_SELL_DEX,
+        data_timestamp=time.time(),
         cex_price=2000,
         dex_price=2010,
         spread_bps=50,
@@ -66,6 +67,7 @@ def test_replay_allows_new(signal):
     new_signal = Signal.create(
         pair="ETH/USDT",
         direction=Direction.BUY_CEX_SELL_DEX,
+        data_timestamp=time.time(),
         cex_price=2000,
         dex_price=2010,
         spread_bps=50,
