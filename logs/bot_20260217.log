@@ -1,0 +1,115 @@
+2026-02-17 20:48:13 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 20:48:13 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 20:48:13 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 20:48:13 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 20:48:13 |WARNING |Decoding failed for b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00': Decoding failed: Tried to read 32 bytes, only got 2 bytes.
+2026-02-17 20:48:13 |WARNING |Detected Swap on ETH-USDC:
+  Tx: 0x123...
+  Amount: 0.0000 -> Min: 0.0019
+  Expected (Local): 0.00
+  Implied Slippage: 5.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 20:48:13 |INFO |Circuit breaker reset
+2026-02-17 20:52:25 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
+2026-02-17 20:52:25 |INFO |Bot starting... ChainID: 31337
+2026-02-17 20:52:25 |INFO |Loading 1 pools 
+2026-02-17 20:52:26 |INFO |✅ Pool loaded: UNI-V2 | Tokens: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 - 0xdAC17F958D2ee523a2206206994597C13D831ec7
+2026-02-17 20:52:26 |INFO |Initializing router with 1 pairs
+2026-02-17 20:52:28 |INFO |Starting pricing engine...
+2026-02-17 20:52:28 |INFO |Connecting to Mempool: ws://127.0.0.1:8545
+2026-02-17 20:52:28 |INFO |Subscription response: {"jsonrpc":"2.0","id":1,"result":"0x4d55734d52426b434270664e32596147"}
+2026-02-17 20:52:30 |WARNING |Detected Swap on UNI-V2:
+  Tx: 1d5ddfb35a...
+  Amount: 0.1000 -> Min: 0.0000
+  Expected (Local): 198.98
+  Implied Slippage: 100.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 20:52:31 |WARNING |Detected Swap on UNI-V2:
+  Tx: be2e5660b1...
+  Amount: 0.1000 -> Min: 0.0000
+  Expected (Local): 198.98
+  Implied Slippage: 100.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 20:52:32 |WARNING |Detected Swap on UNI-V2:ц
+  Tx: 42b592b78e...
+  Amount: 0.1000 -> Min: 0.0000
+  Expected (Local): 198.98
+  Implied Slippage: 100.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 20:52:34 |WARNING |Detected Swap on UNI-V2:
+  Tx: 15b855c217...
+  Amount: 0.1000 -> Min: 0.0000
+  Expected (Local): 198.98
+  Implied Slippage: 100.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 20:52:34 |INFO |Bot stopped by user
+2026-02-17 21:04:55 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:04:55 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:04:55 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:04:55 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:04:55 |WARNING |Decoding failed for b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00': Decoding failed: Tried to read 32 bytes, only got 2 bytes.
+2026-02-17 21:04:55 |WARNING |Detected Swap on ETH-USDC:
+  Tx: 0x123...
+  Amount: 0.0000 -> Min: 0.0019
+  Expected (Local): 0.00
+  Implied Slippage: 5.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 21:04:55 |INFO |Circuit breaker reset
+2026-02-17 21:04:57 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
+2026-02-17 21:04:59 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
+2026-02-17 21:06:52 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:06:52 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:06:52 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:06:52 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:08:06 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:08:06 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:08:06 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:08:06 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:11:07 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:11:07 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:11:07 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:11:07 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:11:07 |WARNING |Risk check failed: Trade size $200.00 > limit $5.0
+2026-02-17 21:11:57 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:11:57 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:11:57 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:11:57 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:13:31 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:13:31 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:13:31 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:13:31 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:13:31 |WARNING |Risk check failed: Trade size $200.00 > limit $5.0
+2026-02-17 21:14:35 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:14:35 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:14:35 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:14:35 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:14:35 |WARNING |Risk check failed: Trade size $20.00 > limit $5.0
+2026-02-17 21:14:46 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:14:46 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:14:46 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:14:46 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:14:46 |INFO |DRY RUN | Would trade: ETH/USDT BUY_CEX_SELL_DEX size=0.0010 spread=250.0bps expected_pnl=$4.00
+2026-02-17 21:17:28 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:17:28 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:17:28 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:17:28 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:17:28 |INFO |DRY RUN | Would trade: ETH/USDT BUY_CEX_SELL_DEX size=0.0010 spread=250.0bps expected_pnl=$4.00
+2026-02-17 21:18:16 |INFO |Bot initialized in DRY RUN mode. No real trades will be executed.
+2026-02-17 21:18:16 |INFO |Initializing MOCK balances for DRY RUN...
+2026-02-17 21:18:16 |INFO |Mock CEX balances set: dict_keys(['ETH', 'USDC', 'USDT'])
+2026-02-17 21:18:16 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-17 21:18:16 |INFO |DRY RUN | Would trade: ETH/USDT BUY_CEX_SELL_DEX size=0.0010 spread=250.0bps expected_pnl=$4.00
+2026-02-17 21:18:16 |WARNING |Decoding failed for b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00': Decoding failed: Tried to read 32 bytes, only got 2 bytes.
+2026-02-17 21:18:16 |WARNING |Detected Swap on ETH-USDC:
+  Tx: 0x123...
+  Amount: 0.0000 -> Min: 0.0019
+  Expected (Local): 0.00
+  Implied Slippage: 5.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 21:18:16 |INFO |Circuit breaker reset
+2026-02-17 21:18:16 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
+2026-02-17 21:18:17 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
+2026-02-17 21:19:23 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
+2026-02-17 21:19:54 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
+2026-02-17 21:19:55 |WARNING |Decoding failed for b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00': Decoding failed: Tried to read 32 bytes, only got 2 bytes.
+2026-02-17 21:19:55 |WARNING |Detected Swap on ETH-USDC:
+  Tx: 0x123...
+  Amount: 0.0000 -> Min: 0.0019
+  Expected (Local): 0.00
+  Implied Slippage: 5.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-17 21:19:55 |INFO |Circuit breaker reset
+2026-02-17 21:19:56 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
+2026-02-17 21:19:56 |ERROR |Wrap ETH failed: {'code': -32003, 'message': 'Insufficient funds for gas * price + value'}
