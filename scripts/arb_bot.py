@@ -525,7 +525,7 @@ if __name__ == "__main__":
     bot_config = {
         "rpc_url": Config.RPC_URL,
         "pairs": ["ARB/USDC"] if Config.PRODUCTION else ["ARB/USDC"],
-        "trade_size": 20.0 if Config.PRODUCTION else 100.0,
+        "trade_size": 90.0 if Config.PRODUCTION else 100.0,
         "dry_run": Config.DRY_RUN,
         "signal_config": {"min_spread_bps": 5},
         "summary_hour_utc": 18,

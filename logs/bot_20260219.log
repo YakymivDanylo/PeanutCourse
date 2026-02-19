@@ -5960,11 +5960,6 @@
 2026-02-19 16:04:32 |WARNING |DEBUG: Could not fetch prices for ETH/USDC
 2026-02-19 16:04:33 |INFO |DEBUG: Tick start...
 2026-02-19 16:04:33 |CRITICAL |KILL SWITCH ACTIVE - STOPPING
-2026-02-19 16:04:43 |ERROR |Telegram error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8280877860:AAH9-rF3q8KzB2NT2fyVMhknHSPJhEgnwZA/sendMessage (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)"))
-2026-02-19 16:04:43 |INFO |Bot stopping...
-2026-02-19 16:04:43 |INFO |DEBUG: Tick end. Sleeping 1s...
-2026-02-19 16:04:43 |ERROR |Connection lost: timed out during opening handshake. Reconnecting in 5s...
-2026-02-19 16:04:54 |ERROR |Telegram error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8280877860:AAH9-rF3q8KzB2NT2fyVMhknHSPJhEgnwZA/sendMessage (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)"))
 2026-02-19 16:13:52 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
 2026-02-19 16:13:52 |INFO |Bot starting... ChainID: 42161
 2026-02-19 16:13:52 |CRITICAL |KILL SWITCH FOUND ON STARTUP. STOPPING.
@@ -12745,8 +12740,6 @@
 2026-02-19 19:05:00 |CRITICAL |KILL SWITCH ACTIVE - STOPPING
 2026-02-19 19:05:00 |INFO |Bot stopping...
 2026-02-19 19:05:00 |INFO |DEBUG: Tick end. Sleeping 1s...
-2026-02-19 19:06:09 |ERROR |Telegram error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8280877860:AAH9-rF3q8KzB2NT2fyVMhknHSPJhEgnwZA/sendMessage (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)"))
-2026-02-19 19:06:17 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
 2026-02-19 19:06:17 |INFO |Bot starting... ChainID: 42161
 2026-02-19 19:06:17 |INFO |Loading 1 pools 
 2026-02-19 19:06:18 |INFO |✅ Pool loaded: UNI-V2 | Tokens: 0x912CE59144191C1204E64559FE8253a0e49E6548 - 0xaf88d065e77c8cC2239327C5EDb3A432268e5831
@@ -16846,3 +16839,36 @@
 2026-02-19 20:14:42 |CRITICAL |KILL SWITCH ACTIVE - STOPPING
 2026-02-19 20:14:42 |INFO |Bot stopping...
 2026-02-19 20:14:42 |INFO |DEBUG: Tick end. Sleeping 1s...
+2026-02-19 20:24:17 |WARNING |Telegram alerts DISABLED (missing token or chat_id)
+2026-02-19 20:24:34 |ERROR |Telegram send failed: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2026-02-19 20:24:34 |WARNING |Bot initialized in PRODUCTION mode. REAL FUNDS AT RISK.
+2026-02-19 20:24:34 |INFO |DEBUG: Generating signal for ETH/USDT...
+2026-02-19 20:24:34 |INFO |DEBUG: Found signal. Spread: 250.0 bps. Net PnL: 4.0
+2026-02-19 20:24:34 |INFO |Executing: BUY_CEX_SELL_DEX 0.001 ETH/USDT
+2026-02-19 20:24:34 |INFO |SUCCESS: PnL=$3.80
+2026-02-19 20:24:34 |ERROR |Telegram send failed: {"ok":false,"error_code":401,"description":"Unauthorized"}
+2026-02-19 20:24:34 |INFO |DEBUG: Fetching CEX balances...
+2026-02-19 20:24:34 |INFO |DEBUG: Updating inventory...
+2026-02-19 20:24:34 |INFO |DEBUG: Balances updated.
+2026-02-19 20:24:34 |INFO |Running post-trade balance verification...
+2026-02-19 20:24:34 |ERROR |Balance verification failed: 'dict' object has no attribute 'ARB'
+2026-02-19 20:24:34 |INFO |DEBUG: Fetching CEX balances...
+2026-02-19 20:24:34 |INFO |DEBUG: Updating inventory...
+2026-02-19 20:24:34 |INFO |DEBUG: Balances updated.
+2026-02-19 20:24:34 |WARNING |Decoding failed for b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00': Decoding failed: Tried to read 32 bytes, only got 2 bytes.
+2026-02-19 20:24:34 |WARNING |Detected Swap on ETH-USDC:
+  Tx: 0x123...
+  Amount: 0.0000 -> Min: 0.0019
+  Expected (Local): 0.00
+  Implied Slippage: 5.00% [HIGH SLIPPAGE - ARB OPPORTUNITY]
+2026-02-19 20:24:35 |INFO |Circuit breaker reset
+2026-02-19 20:24:35 |INFO |DEBUG PRICE: ETH/USDT | Size: 1.0 | CEX 2000.0000/2000.0000 | DEX Buy:2222.2222 Sell:2100.0000 | Sprd A (C->D): 500.00bps | Sprd B (D->C): -1000.00bps
+2026-02-19 20:24:35 |WARNING |Inventory Low for BUY_CEX_SELL_DEX: CEX_USDC=10.00 (Need 2000.00), DEX_ETH=10000.0000 (Need 1.0000)
+2026-02-19 20:24:35 |INFO |DEBUG PRICE: ETH/USDT | Size: 1.0 | CEX 2000.0000/2000.0000 | DEX Buy:2061.8557 Sell:2050.0000 | Sprd A (C->D): 250.00bps | Sprd B (D->C): -300.00bps
+2026-02-19 20:24:35 |INFO |DEBUG PRICE: ETH/USDT | Size: 1.0 | CEX 2000.0000/2000.0000 | DEX Buy:2000.0000 Sell:2000.0000 | Sprd A (C->D): 0.00bps | Sprd B (D->C): 0.00bps
+2026-02-19 20:24:35 |INFO |DEBUG PRICE: ETH/USDT | Size: 1.0 | CEX 2000.0000/2000.0000 | DEX Buy:2061.8557 Sell:2050.0000 | Sprd A (C->D): 250.00bps | Sprd B (D->C): -300.00bps
+2026-02-19 20:24:35 |INFO |DEBUG PRICE: ETH/USDT | Size: 1.0 | CEX 2100.0000/2105.0000 | DEX Buy:2004.7619 Sell:2000.0000 | Sprd A (C->D): -498.81bps | Sprd B (D->C): 475.06bps
+2026-02-19 20:24:35 |WARNING |Forksimulation failed to connect to http://127.0.0.1:8545
+2026-02-19 20:24:35 |WARNING |Forksimulation failed to connect to http://127.0.0.1:8545
+2026-02-19 20:24:35 |WARNING |Forksimulation failed to connect to http://127.0.0.1:8545
+2026-02-19 20:24:35 |WARNING |Forksimulation failed to connect to http://127.0.0.1:8545

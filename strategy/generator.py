@@ -60,8 +60,8 @@ class SignalGenerator:
 
         logger.info(
             f"DEBUG PRICE: {pair} | Size: {size} | "
-            f"CEX {prices['cex_bid']:.2f}/{prices['cex_ask']:.2f} | "
-            f"DEX Buy:{prices['dex_buy']:.2f} Sell:{prices['dex_sell']:.2f} | "
+            f"CEX {prices['cex_bid']:.4f}/{prices['cex_ask']:.4f} | "
+            f"DEX Buy:{prices['dex_buy']:.4f} Sell:{prices['dex_sell']:.4f} | "
             f"Sprd A (C->D): {spread_a:.2f}bps | Sprd B (D->C): {spread_b:.2f}bps"
         )
 
