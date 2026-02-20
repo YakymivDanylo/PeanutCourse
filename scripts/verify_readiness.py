@@ -41,7 +41,7 @@ def test_readiness():
         Config.BINANCE_BASE_URL = "https://api.binance.com"
 
         client = ExchangeClient(exch_config)
-        book = client.fetch_order_book("ETH/USDC", limit=5)
+        book = client.fetch_order_book("ARB/USDC", limit=5)
 
         if book and book["bids"] and book["asks"]:
             binance_price = book["bids"][0][0]
@@ -75,7 +75,7 @@ def test_readiness():
             pool_addr = Address(Config.POOL_ADDRESS)
             pair = UniswapV2Pair.from_chain(pool_addr, chain_client)
 
-            res_in, res_out = pair._get_reserve(Address(Config.WETH))
+            res_in, res_out = pair._get_reserve(Address(Config.ARB))
 
             normalized_in = Decimal(res_in) / Decimal(10**18)
             normalized_out = Decimal(res_out) / Decimal(10**6)
@@ -90,7 +90,7 @@ def test_readiness():
 
             if binance_price:
                 diff = abs(float(dex_price) - float(binance_price))
-                print(f"   ℹ️  Price Diff: {diff:.2f} USDC")
+                print(f"   ℹ️  Price Diff: {diff:.4f} USDC")
 
     except Exception as e:
         print_status("Arbitrum Connection", False, str(e))
