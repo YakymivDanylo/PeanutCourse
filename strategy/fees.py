@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class FeeStructure:
     cex_taker_bps: float = 10.0
     dex_swap_bps: float = 30.0
-    gas_cost_usd: float = 5.0
+    gas_cost_usd: float = 0.10
 
     def total_fee_bps(self, trade_value_usd: float) -> float:
         """Returns total fee in basis points relative to trade value"""
