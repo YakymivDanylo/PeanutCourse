@@ -109,7 +109,7 @@ class ArbBot:
         )
 
         self.risk_limits = RiskLimits(
-            max_trade_usd=5.0, max_daily_loss=10.0, max_drawdown_pct=0.15
+            max_trade_usd=20.0, max_daily_loss=20.0, max_drawdown_pct=0.50
         )
         self.risk_manager = RiskManager(self.risk_limits, initial_capital=100.0)
 

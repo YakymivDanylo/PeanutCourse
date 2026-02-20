@@ -8,7 +8,7 @@
 
 - Pair: ETH/USDC, ARB/USDC
 
-- Risk Parameters: Використано max_trade_usd=25.0 та max_daily_loss=20.0 згідно з вимогами безпеки safety.py. Це дозволяє зберегти 80% капіталу навіть у разі критичного збою.
+- Risk Parameters:Used max_trade_usd=25.0 and max_daily_loss=20.0 according to safety.py security requirements. This allows you to preserve 80% of your capital even in the event of a critical failure.
 
 2. Trading Results
 
