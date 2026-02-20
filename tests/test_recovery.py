@@ -40,12 +40,12 @@ def test_circuit_breaker_trips():
 
 def test_circuit_breaker_resets():
     """Breaker resets after cooldown."""
-    cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=1, cooldown_seconds=0.1))
+    cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=1, cooldown_seconds=5.0))
 
     cb.record_failure()
     assert cb.is_open()
 
-    time.sleep(0.2)
+    time.sleep(5.1)
     assert not cb.is_open()
 
 

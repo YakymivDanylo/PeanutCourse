@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 from strategy.signal import Signal
 import requests
+from core.alert import TelegramAlert
 
 
 @dataclass
@@ -19,6 +20,8 @@ class CircuitBreaker:
         self.config = config or CircuitBreakerConfig()
         self.failures: list[float] = []
         self.tripped_at: Optional[float] = None
+
+        self.telegram_alert = TelegramAlert()
 
     def record_failure(self, error_reason: str = "Unknown error"):
         now = time.time()
@@ -36,6 +39,13 @@ class CircuitBreaker:
         self.tripped_at = time.time()
         discord_ts = int(self.tripped_at)
         discord_time_str = f"<t:{discord_ts}:F>"
+
+        tg_message = (
+            f"<b>Circuit Breaker Tripped</b>\n"
+            f"Reason: <code>{error_msg}</code>\n"
+            f"Failures in window: {len(self.failures)}"
+        )
+        self.telegram_alert.send_critical(tg_message)
 
         if self.config.webhook_url:
             try:
