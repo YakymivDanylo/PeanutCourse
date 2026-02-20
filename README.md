@@ -83,6 +83,10 @@ management, robust blockchain interaction, transaction construction, and analysi
     - ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY_ALCHEMY
     - BINANCE_TESTNET_API_KEY=YOUR_KEY
     - BINANCE_TESTNET_SECRET=YOUR_SECRET_KEY
+    - BINANCE_API_KEY_PROD=
+    - BINANCE_SECRET_KEY_PROD=
+    - TELEGRAM_BOT_TOKEN=
+    - TELEGRAM_CHAT_ID=
 
 Note: The .env file must never be committed to the repository.
 
@@ -90,10 +94,15 @@ Note: The .env file must never be committed to the repository.
 
 ### Running the Application
 
+Before running arb_bot for ARB/USDC you have to fill .env with your data for binance production and also telegram-bot
+
+- make run_arb_bot
+
 To verify the system works on a real network (Sepolia Testnet), run the integration script. This script checks balances,
 builds a self-transfer transaction, signs it, and sends it to the network:
 
 - make run
+
 
 ### Expected Output:
 
@@ -399,3 +408,35 @@ and robust multi-venue execution.
 * **Adaptive Safety (Circuit Breaker)**: Automated system protection that halts the bot after 3 consecutive failures within a 5-minute window.
 * **Discord Notifications**: Instant alerting system via Webhooks to notify about Circuit Breaker trips, critical errors, or successful high-PnL trades.
 * **Flashbots Integration**: Specialized DEX-first execution path to minimize gas costs and mitigate the risk of failed on-chain transactions.
+
+
+## Final Production Run & Risk Management
+
+During the final production phase, the bot was deployed to the **Arbitrum One (L2)** network targeting the **ETH/USDC** and **ARB/USDC** pairs between **Uniswap V2** and **Binance**.
+
+### Safety & Risk Controls
+Absolute strict limits are hardcoded via `safety.py` to prevent any catastrophic drain of funds:
+- **`ABSOLUTE_MAX_TRADE_USD`**: $25.0
+- **`ABSOLUTE_MAX_DAILY_LOSS`**: $20.0 (Preserves 80% of $100 starting capital)
+- **`ABSOLUTE_MIN_CAPITAL`**: $50.0 (Auto-stop threshold)
+- **`ABSOLUTE_MAX_TRADES_PER_HOUR`**: 30
+- **Manual Kill Switch**: Implemented and successfully tested (bot halts execution within one loop cycle upon detecting the trigger file).
+- **Circuit Breaker**: Active to monitor infrastructure instability.
+
+### Production Results
+- **Initial Capital**: $100.00
+- **Ending Capital**: $100.00
+- **Total Trades Executed**: 0
+- **Total PnL**: $0.00
+
+**Analysis**: 
+The bot correctly preserved 100% of the capital. With a starting bankroll of $100 and a max trade size of $25, the required spread to overcome L2 gas fees (EIP-1559 differences from Mainnet) and exchange routing fees is significantly higher than market averages. The safety logic worked as intended, correctly rejecting trades that did not have a positive net expectancy after all costs were calculated.
+
+### Checklist of Fulfilled Requirements
+- [x] **Production config**: Connected to Arbitrum L2 + Binance Production.
+- [x] **Safety constants**: Hardcoded absolute limits (`safety.py`).
+- [x] **Kill switch**: File-based kill switch implemented and tested.
+- [x] **Risk limits**: `max_trade_usd` and `max_daily_loss` integrated.
+- [x] **Pre-trade validation**: Spread sanity, expiration, and fee coverage checks.
+- [x] **Logging & Journaling**: Trade state logs output to `/logs` and daily journals maintained.
+- [x] **Capital Preservation**: 100% of capital preserved under strict risk checks.

@@ -18,4 +18,7 @@ run:
 run_fork:
 	./scripts/start_fork.sh
 
+run_arb_bot:
+	$(PYTHON) scripts/tg_controller.py
+
 check: format lint test
